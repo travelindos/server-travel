@@ -3,6 +3,7 @@ export enum EmailType {
   GENERATE_NEW_OTP = 'generateNewOtp',
   VERIFY_OTP = 'verifyOtp',
   RESET_PASSWORD = 'resetPassword',
+  SUCCESS_RESET_PASSWORD = 'successResetPassword',
   SUCCESS_BOOKING = 'successBooking',
   SUCCESS_PAYMENT = 'successPayment',
 }
@@ -10,7 +11,7 @@ export enum EmailType {
 export class SendMailOptions {
   email: string;
   otpCode?: string;
-  links: string;
+  links?: string;
   subjectMessage?: string;
   webhookInfo?: string;
 }

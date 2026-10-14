@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { EmailService } from 'src/common/emails/emails.service';
+import { EmailService } from '../../../common/emails/emails.service';
 import { SessionModule } from '../../session/session.module';
 import { UsersService } from '../users.service';
 import { AuthController } from './auth.controller';

@@ -12,7 +12,7 @@ import {
   EmailType,
   SendMailOptions,
   SendMailOrdersOptions,
-} from 'src/types/email.type';
+} from '../../types/email.type';
 
 @Injectable()
 export class EmailService {
@@ -37,27 +37,25 @@ export class EmailService {
   } as SMTPTransport.Options);
 
   async sendMail(type: EmailType, options: SendMailOptions) {
-    const { email, links, subjectMessage } = options;
+    const { email, links = '', subjectMessage } = options;
 
     let subject = '';
     let htmlContent = '';
 
     switch (type) {
       case EmailType.VERIFY_ACCOUNT:
-        subject = subjectMessage;
-        htmlContent = `<div style="font-family: Arial, sans-serif; text-align: center;">
-                    <p>${subjectMessage}</p>
-                    <a href=${links} style="background:rgba(0, 0, 0, 1); text-color:#ffff; padding: 10px 5px">Verify Account</a>
-                    <p>Kode ini berlaku hanya dalam beberapa menit.</p>
-                </div>`;
+        subject = subjectMessage || 'Verify your customer account - Pacific Travel Indo';
+        htmlContent = this.generateVerifyAccountTemplate(links);
         break;
 
       case EmailType.RESET_PASSWORD:
-        subject = subjectMessage;
-        htmlContent = `<div style="font-family: Arial, sans-serif; text-align: center;">
-                    <p>${subjectMessage}</p>
-                    <p>Reset Password ini berlaku hanya dalam beberapa menit.</p>
-                    <a href=${links} style="background:rgb(246, 127, 0); padding: 10px 5px">Reset Password</a>`;
+        subject = subjectMessage || 'Reset your password - Pacific Travel Indo';
+        htmlContent = this.generateResetPasswordTemplate(links);
+        break;
+
+      case EmailType.SUCCESS_RESET_PASSWORD:
+        subject = subjectMessage || 'Your password was reset successfully - Pacific Travel Indo';
+        htmlContent = this.generateSuccessResetPasswordTemplate(email);
         break;
 
       default:
@@ -66,7 +64,7 @@ export class EmailService {
     }
 
     const mailOptions = {
-      from: process.env.EMAIL_USERNAME,
+      from: `Pacific Travel Indo <${process.env.EMAIL_USERNAME}>`,
       to: email,
       subject,
       html: htmlContent,
@@ -82,6 +80,311 @@ export class EmailService {
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
+  }
+
+  // ─── Shared Modern Email Layout ─────────────────────────────────────────────
+  private buildEmailWrapper(content: string, previewText: string = ''): string {
+    const year = new Date().getFullYear();
+    const loginUrl = process.env.CLIENT_SITE
+      ? `${process.env.CLIENT_SITE.replace(/\/+$/, '')}/login`
+      : 'https://pacifictravelindo.com/login';
+
+    return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pacific Travel Indo</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #F1F5F9;
+      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      color: #1E293B;
+    }
+    .wrapper {
+      width: 100%;
+      table-layout: fixed;
+      background-color: #F1F5F9;
+      padding: 40px 0;
+    }
+    .main-table {
+      max-width: 600px;
+      margin: 0 auto;
+      background-color: #FFFFFF;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 10px 25px -5px rgba(15, 76, 129, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+    }
+    .header-banner {
+      background: linear-gradient(135deg, #0A2540 0%, #0F4C81 100%);
+      padding: 36px 30px;
+      text-align: center;
+      position: relative;
+    }
+    .brand-logo-text {
+      color: #FFFFFF;
+      font-size: 24px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      margin: 0;
+      text-transform: uppercase;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+    .brand-orange {
+      color: #F67F00;
+    }
+    .brand-tagline {
+      color: #94A3B8;
+      font-size: 13px;
+      font-weight: 500;
+      margin-top: 4px;
+      letter-spacing: 1px;
+    }
+    .orange-divider {
+      height: 4px;
+      background: linear-gradient(90deg, #F67F00 0%, #FF9F2D 100%);
+    }
+    .content-body {
+      padding: 40px 36px;
+    }
+    .badge-icon {
+      width: 64px;
+      height: 64px;
+      margin: 0 auto 20px auto;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      line-height: 64px;
+      font-size: 28px;
+    }
+    .badge-orange {
+      background-color: #FFF4E5;
+      color: #F67F00;
+    }
+    .badge-blue {
+      background-color: #E0F2FE;
+      color: #0F4C81;
+    }
+    .badge-green {
+      background-color: #DCFCE7;
+      color: #16A34A;
+    }
+    h1 {
+      color: #0F2942;
+      font-size: 22px;
+      font-weight: 700;
+      margin: 0 0 12px 0;
+      text-align: center;
+    }
+    p {
+      color: #475569;
+      font-size: 15px;
+      line-height: 1.6;
+      margin: 0 0 20px 0;
+    }
+    .btn-container {
+      text-align: center;
+      margin: 32px 0;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #F67F00 0%, #E07200 100%);
+      color: #FFFFFF !important;
+      font-size: 16px;
+      font-weight: 700;
+      text-decoration: none;
+      padding: 16px 36px;
+      border-radius: 12px;
+      display: inline-block;
+      box-shadow: 0 4px 14px rgba(246, 127, 0, 0.35);
+      transition: all 0.2s ease;
+    }
+    .btn-blue {
+      background: linear-gradient(135deg, #0F4C81 0%, #0A3459 100%);
+      color: #FFFFFF !important;
+      font-size: 16px;
+      font-weight: 700;
+      text-decoration: none;
+      padding: 16px 36px;
+      border-radius: 12px;
+      display: inline-block;
+      box-shadow: 0 4px 14px rgba(15, 76, 129, 0.35);
+    }
+    .info-card {
+      background-color: #F8FAFC;
+      border: 1px solid #E2E8F0;
+      border-radius: 12px;
+      padding: 16px 20px;
+      margin: 24px 0;
+    }
+    .info-card p {
+      margin: 0;
+      font-size: 13px;
+      color: #64748B;
+    }
+    .link-box {
+      word-break: break-all;
+      font-size: 12px;
+      color: #0F4C81;
+      background-color: #F1F5F9;
+      padding: 10px 14px;
+      border-radius: 8px;
+      margin-top: 8px;
+      display: block;
+      font-family: monospace;
+    }
+    .expiry-alert {
+      display: flex;
+      align-items: center;
+      background-color: #FFF7ED;
+      border-left: 4px solid #F67F00;
+      padding: 12px 16px;
+      border-radius: 6px;
+      margin-top: 20px;
+    }
+    .expiry-alert p {
+      margin: 0;
+      font-size: 13px;
+      color: #9A3412;
+      font-weight: 500;
+    }
+    .footer {
+      background-color: #F8FAFC;
+      border-top: 1px solid #E2E8F0;
+      padding: 28px 36px;
+      text-align: center;
+    }
+    .footer-text {
+      color: #94A3B8;
+      font-size: 12px;
+      line-height: 1.5;
+      margin: 0;
+    }
+    .footer-links a {
+      color: #0F4C81;
+      text-decoration: none;
+      margin: 0 8px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <table class="main-table" width="100%" cellpadding="0" cellspacing="0">
+      <!-- Header Banner -->
+      <tr>
+        <td class="header-banner">
+          <div class="brand-logo-text">PACIFIC <span class="brand-orange">TRAVEL</span> INDO</div>
+          <div class="brand-tagline">YOUR TRUSTED TRAVEL PARTNER</div>
+        </td>
+      </tr>
+      <tr>
+        <td class="orange-divider"></td>
+      </tr>
+      <!-- Body Content -->
+      <tr>
+        <td class="content-body">
+          ${content}
+        </td>
+      </tr>
+      <!-- Footer -->
+      <tr>
+        <td class="footer">
+          <p class="footer-links" style="margin-bottom: 12px;">
+            <a href="${loginUrl}">Login</a> • 
+            <a href="https://pacifictravelindo.com">Website</a> • 
+            <a href="mailto:info@pacifictravelindo.com">Support</a>
+          </p>
+          <p class="footer-text">
+            © ${year} Pacific Travel Indo. All rights reserved.<br/>
+            This is an automated email notification, please do not reply directly to this message.
+          </p>
+        </td>
+      </tr>
+    </table>
+  </div>
+</body>
+</html>
+    `;
+  }
+
+  // ─── 1. Template Email Verification ──────────────────────────────────────────
+  private generateVerifyAccountTemplate(link: string): string {
+    const content = `
+      <div class="badge-icon badge-orange">✉️</div>
+      <h1>Verify Your Email Address</h1>
+      <p style="text-align: center;">
+        Welcome to <strong>Pacific Travel Indo</strong>! We're excited to have you on board.
+        Please verify your email address to activate your account and start booking your dream tours.
+      </p>
+      
+      <div class="btn-container">
+        <a href="${link}" class="btn-primary" target="_blank">Verify My Account</a>
+      </div>
+
+      <div class="expiry-alert">
+        <p>⏱️ <strong>Security Note:</strong> This verification link will expire in <strong>60 minutes</strong>.</p>
+      </div>
+    `;
+
+    return this.buildEmailWrapper(content, 'Verify your email address for Pacific Travel Indo');
+  }
+
+  // ─── 2. Template Reset Password ──────────────────────────────────────────────
+  private generateResetPasswordTemplate(link: string): string {
+    const content = `
+      <div class="badge-icon badge-blue">🔐</div>
+      <h1>Password Reset Request</h1>
+      <p style="text-align: center;">
+        We received a request to reset the password for your <strong>Pacific Travel Indo</strong> account.
+        Click the button below to set a new password.
+      </p>
+      
+      <div class="btn-container">
+        <a href="${link}" class="btn-primary" target="_blank">Reset Password</a>
+      </div>
+
+      <div class="expiry-alert">
+        <p>⏱️ <strong>Notice:</strong> This password reset link is valid for <strong>60 minutes</strong>.</p>
+      </div>
+    `;
+
+    return this.buildEmailWrapper(content, 'Reset your password for Pacific Travel Indo');
+  }
+
+  // ─── 3. Template Success Reset Password ──────────────────────────────────────
+  private generateSuccessResetPasswordTemplate(email: string): string {
+    const loginUrl = process.env.CLIENT_SITE
+      ? `${process.env.CLIENT_SITE.replace(/\/+$/, '')}/login`
+      : 'https://pacifictravelindo.com/login';
+
+    const content = `
+      <div class="badge-icon badge-green">✅</div>
+      <h1>Password Reset Successful</h1>
+      <p style="text-align: center;">
+        Your password for <strong>${email}</strong> has been updated successfully.
+        You can now log in to your account using your new password.
+      </p>
+      
+      <div class="btn-container">
+        <a href="${loginUrl}" class="btn-blue" target="_blank">Log In to Your Account</a>
+      </div>
+
+      <div class="info-card" style="border-left: 4px solid #EF4444; background-color: #FEF2F2;">
+        <p style="color: #991B1B;">
+          🔒 <strong>Security Warning:</strong> If you did not make this change, please contact our support team immediately at 
+          <a href="mailto:info@pacifictravelindo.com" style="color: #991B1B; font-weight: bold;">info@pacifictravelindo.com</a> to secure your account.
+        </p>
+      </div>
+    `;
+
+    return this.buildEmailWrapper(content, 'Your Pacific Travel Indo password has been updated');
   }
 
   /**
@@ -143,7 +446,7 @@ export class EmailService {
     html: string,
   ): Promise<void> {
     const mailOptions = {
-      from: process.env.EMAIL_USERNAME,
+      from: `Pacific Travel Indo <${process.env.EMAIL_USERNAME}>`,
       to: email,
       subject,
       html,
@@ -161,7 +464,7 @@ export class EmailService {
     const adminEmails = process.env.ADMIN_EMAILS?.split(',') || [];
 
     const mailOptions = {
-      from: process.env.EMAIL_USERNAME,
+      from: `Pacific Travel Indo <${process.env.EMAIL_USERNAME}>`,
       to: ownerEmail,
       cc: adminEmails.filter(Boolean).join(','),
       subject,
@@ -197,27 +500,27 @@ export class EmailService {
       amountDisplay = `<p><strong>Total: Rp ${options.totalAmount?.toLocaleString('id-ID') || 0}</strong></p>`;
     }
 
-    return `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; border: 1px solid #ddd; padding: 20px; border-radius: 8px;">
-        <h2 style="color: #333;">Konfirmasi Pesanan Anda</h2>
-        <p>Hai <strong>${options.email}</strong>,</p>
-        <p>Terima kasih telah memesan dengan kami. Pesanan Anda dengan ID <strong>${options.orderCode}</strong> telah kami terima.</p>
+    const content = `
+      <div class="badge-icon badge-orange">📋</div>
+      <h1>Konfirmasi Pesanan Anda</h1>
+      <p style="text-align: center;">
+        Hai <strong>${options.email}</strong>, terima kasih telah memesan paket tur di <strong>Pacific Travel Indo</strong>.
+        Pesanan Anda dengan kode <strong>${options.orderCode}</strong> telah kami terima.
+      </p>
 
-        <h3>Detail Pesanan:</h3>
-        <div style="background: #f9f9f9; padding: 10px; border-radius: 5px;">
-          ${options.orderDetails}
-        </div>
-
-        ${amountDisplay}
+      <div class="info-card">
+        <h3 style="margin-top: 0; color: #0F4C81;">Detail Pesanan:</h3>
+        <div>${options.orderDetails}</div>
+        <div style="margin-top: 12px;">${amountDisplay}</div>
         <p><strong>Metode Pembayaran:</strong> ${options.paymentMethod}</p>
-        <p>Silahkan lanjutkan pembayaran melalui metode pembayaran yang Anda pilih.</p>
+      </div>
 
-        ${options.links ? `<a href="${options.links}" style="display: inline-block; background: rgb(246, 127, 0); color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; margin-top: 10px;">Lanjutkan Pembayaran</a>` : ''}
-
-        <hr/>
-        <p style="font-size: 12px; color: #777;">Email ini dikirim otomatis, mohon tidak membalas.</p>
+      <div class="btn-container">
+        ${options.links ? `<a href="${options.links}" class="btn-primary" target="_blank">Lanjutkan Pembayaran</a>` : ''}
       </div>
     `;
+
+    return this.buildEmailWrapper(content);
   }
 
   /**
@@ -242,27 +545,22 @@ export class EmailService {
       amountDisplay = `<li><strong>Total Bayar:</strong> Rp ${options.totalAmount?.toLocaleString('id-ID') || 0}</li>`;
     }
 
-    return `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; border: 1px solid #ddd; padding: 20px; border-radius: 8px;">
-        <h2 style="color: #d9534f;">Pesanan Baru Diterima</h2>
-        <p><strong>Detail Pesanan:</strong></p>
-        <ul>
-          <li><strong>ID Pesanan:</strong> ${options.orderCode}</li>
+    const content = `
+      <div class="badge-icon badge-orange">🔔</div>
+      <h1>Pesanan Baru Diterima</h1>
+      <div class="info-card">
+        <ul style="margin: 0; padding-left: 20px; color: #334155;">
+          <li><strong>Kode Pesanan:</strong> ${options.orderCode}</li>
           <li><strong>Email Pelanggan:</strong> ${options.email}</li>
           ${amountDisplay}
           <li><strong>Metode Pembayaran:</strong> ${options.paymentMethod}</li>
         </ul>
-
-        <h3>Detail Pemesanan:</h3>
-        <div style="background: #f9f9f9; padding: 10px; border-radius: 5px;">
-          ${options.orderDetails}
-        </div>
-
-        <p style="margin-top: 15px;">Pesanan sedang menunggu pembayaran dari pelanggan.</p>
-        <hr/>
-        <p style="font-size: 12px; color: #777;">Email ini dikirim otomatis, mohon tidak membalas.</p>
+        <h4 style="color: #0F4C81; margin-top: 16px; margin-bottom: 8px;">Detail Pemesanan:</h4>
+        <div>${options.orderDetails}</div>
       </div>
     `;
+
+    return this.buildEmailWrapper(content);
   }
 
   /**
@@ -287,25 +585,22 @@ export class EmailService {
       amountDisplay = `<p><strong>Total Dibayar: Rp ${options.totalAmount?.toLocaleString('id-ID') || 0}</strong></p>`;
     }
 
-    return `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; border: 1px solid #ddd; padding: 20px; border-radius: 8px;">
-        <h2 style="color: #28a745;">Pembayaran Berhasil!</h2>
-        <p>Hai <strong>${options.email}</strong>,</p>
-        <p>Pembayaran Anda untuk pesanan <strong>${options.orderCode}</strong> telah berhasil diproses.</p>
+    const content = `
+      <div class="badge-icon badge-green">🎉</div>
+      <h1>Pembayaran Berhasil!</h1>
+      <p style="text-align: center;">
+        Hai <strong>${options.email}</strong>, pembayaran Anda untuk pesanan <strong>${options.orderCode}</strong> telah berhasil diproses.
+      </p>
 
-        <h3>Detail Pesanan:</h3>
-        <div style="background: #f9f9f9; padding: 10px; border-radius: 5px;">
-          ${options.orderDetails}
-        </div>
-
-        ${amountDisplay}
-        <p style="color: #28a745; font-weight: bold;">Status: Pembayaran Berhasil ✓</p>
-
-        <p>Kami akan segera memproses pesanan Anda. Terima kasih!</p>
-        <hr/>
-        <p style="font-size: 12px; color: #777;">Email ini dikirim otomatis, mohon tidak membalas.</p>
+      <div class="info-card" style="border-left: 4px solid #16A34A; background-color: #F0FDF4;">
+        <h3 style="margin-top: 0; color: #166534;">Detail Pembayaran:</h3>
+        <div>${options.orderDetails}</div>
+        <div style="margin-top: 12px;">${amountDisplay}</div>
+        <p style="color: #16A34A; font-weight: bold; margin-bottom: 0;">Status: Pembayaran Lunas ✓</p>
       </div>
     `;
+
+    return this.buildEmailWrapper(content);
   }
 
   /**
@@ -330,26 +625,22 @@ export class EmailService {
       amountDisplay = `<li><strong>Total Dibayar:</strong> Rp ${options.totalAmount?.toLocaleString('id-ID') || 0}</li>`;
     }
 
-    return `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; border: 1px solid #ddd; padding: 20px; border-radius: 8px;">
-        <h2 style="color: #28a745;">Pembayaran Diterima</h2>
-        <p><strong>Detail Pembayaran:</strong></p>
-        <ul>
-          <li><strong>ID Pesanan:</strong> ${options.orderCode}</li>
+    const content = `
+      <div class="badge-icon badge-green">💰</div>
+      <h1>Pembayaran Diterima</h1>
+      <div class="info-card">
+        <ul style="margin: 0; padding-left: 20px; color: #334155;">
+          <li><strong>Kode Pesanan:</strong> ${options.orderCode}</li>
           <li><strong>Email Pelanggan:</strong> ${options.email}</li>
           ${amountDisplay}
           <li><strong>Metode Pembayaran:</strong> ${options.paymentMethod}</li>
         </ul>
-
-        <p style="color: #28a745; font-weight: bold;">Status: Pembayaran Berhasil ✓</p>
-
-        <h3>Detail Pemesanan:</h3>
-        <div style="background: #f9f9f9; padding: 10px; border-radius: 5px;">
-          ${options.orderDetails}
-        </div>
-        <hr/>
-        <p style="font-size: 12px; color: #777;">Email ini dikirim otomatis, mohon tidak membalas.</p>
+        <p style="color: #16A34A; font-weight: bold; margin-top: 12px;">Status: Pembayaran Berhasil ✓</p>
+        <h4 style="color: #0F4C81; margin-top: 16px; margin-bottom: 8px;">Detail Pemesanan:</h4>
+        <div>${options.orderDetails}</div>
       </div>
     `;
+
+    return this.buildEmailWrapper(content);
   }
 }

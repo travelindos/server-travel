@@ -5,14 +5,39 @@ import { AppModule } from './app.module';
 import { ErrorsService } from './common/errors/errors.service';
 import { AuthGuard } from './common/middlewares/auth.guard';
 import { RolesGuard } from './common/middlewares/role.guard';
+import { LoggingInterceptor } from './common/middlewares/logging.interceptor';
+import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    // Suppress NestJS default logger — Winston handles all logging
+    bufferLogs: true,
+  });
+
+  // Use Winston as the default NestJS logger
+  app.useLogger(app.get(WINSTON_MODULE_NEST_PROVIDER));
+
+  // Global Guards
   app.useGlobalGuards(app.get(AuthGuard), app.get(RolesGuard));
+
+  // Global Prefix
   app.setGlobalPrefix('api/v1');
-  app.useGlobalFilters(new ErrorsService());
+
+  // Global Exception Filter (centralized logging of all errors)
+  const errorFilter = app.get(ErrorsService);
+  app.useGlobalFilters(errorFilter);
+
+  // Global Interceptor (centralized HTTP request/response logging)
+  const loggingInterceptor = app.get(LoggingInterceptor);
+  app.useGlobalInterceptors(loggingInterceptor);
+
+  // Validation Pipe
   app.useGlobalPipes(new ValidationPipe({ transform: true }));
+
+  // Cookie Parser
   app.use(cookieParser());
+
+  // CORS
   const origins = [
     'http://localhost:3200',
     'http://localhost:3700',
@@ -24,9 +49,8 @@ async function bootstrap() {
     'https://www.pasifik.my.id',
   ];
   app.enableCors({
-    origin: function (origin, callback) {
-      const allowedOrigins = origins;
-      if (!origin || allowedOrigins.includes(origin)) {
+    origin: (origin, callback) => {
+      if (!origin || origins.includes(origin)) {
         callback(null, true);
       } else {
         callback(new Error('Not allowed by CORS'));
@@ -37,6 +61,6 @@ async function bootstrap() {
 
   const port = process.env.PORT || 8000;
   await app.listen(port);
-  console.log(`Application is running port: ${port}`);
 }
+
 bootstrap();

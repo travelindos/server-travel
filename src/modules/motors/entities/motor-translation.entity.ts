@@ -1,5 +1,5 @@
 import Hashids from 'hashids';
-import { BeforeInsert, Column, CreateDateColumn, DeleteDateColumn, Entity, JoinColumn, ManyToOne, PrimaryColumn, UpdateDateColumn } from 'typeorm';
+import { BeforeInsert, Column, CreateDateColumn, DeleteDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryColumn, UpdateDateColumn } from 'typeorm';
 import { Motor } from './motor.entity';
 
 @Entity('motor_translations')
@@ -21,12 +21,14 @@ export class MotorTranslation {
   @JoinColumn({ name: 'motor_id' })
   motor: Motor;
 
+  @Index()
   @Column()
   language_code: string;
 
   @Column()
   name_motor: string;
 
+  @Index()
   @Column()
   slug: string;
 

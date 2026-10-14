@@ -1,637 +1,365 @@
-import { HttpException, HttpStatus, Inject, Injectable } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
-import { EmailService } from 'src/common/emails/emails.service';
-import { TourResponse } from 'src/types/response/book-tour.type';
 import { In, Repository } from 'typeorm';
-import { Logger } from 'winston';
-// import { CountryService } from '../country/country.service';
-import { DestinationService } from '../destination/destination.service';
-import { UsersService } from '../users/users.service';
-import { CreateBookTourDto } from './dto/create-book-tour.dto';
-import { UpdateBookTourDto } from './dto/update-book-tour.dto';
-import { BookTourItems } from './entities/book-tour-items.entity';
-import { BookTour, StatusBookTour } from './entities/book-tour.entity';
+import { TourResponse } from '../../types/response/book-tour.type';
 import { AddOn } from '../add-ons/entities/add-on.entity';
 import { BookingAddOn } from '../add-ons/entities/booking-add-on.entity';
+import { Customer } from '../customers/entities/customer.entity';
+import { Itinerary, StatusItinerary } from '../itinerary/entities/itinerary.entity';
+import { Tourist } from '../tourists/entities/tourist.entity';
+import { BookersService } from '../bookers/bookers.service';
+import { CreateBookTourDto } from './dto/create-book-tour.dto';
+import { FilterBookTourDto } from './dto/filter-book-tour.dto';
+import { BookTour, StatusBookTour } from './entities/book-tour.entity';
+
+const BOOK_TOUR_RELATIONS = [
+  'customer',
+  'booker',
+  'itinerary',
+  'itinerary.itinerary_items',
+  'itinerary.itinerary_items.destination',
+  'itinerary.itinerary_items.destination.translations',
+  'itinerary.country',
+  'itinerary.state',
+  'tourists',
+  'add_ons',
+  'add_ons.add_on',
+  'payments',
+];
 
 @Injectable()
 export class BookToursService {
   constructor(
-    @Inject(WINSTON_MODULE_NEST_PROVIDER)
-    private readonly logger: Logger,
-    private readonly userService: UsersService,
-    private readonly destinationService: DestinationService,
-    private readonly emailService: EmailService,
     @InjectRepository(BookTour)
     private readonly bookTourRepository: Repository<BookTour>,
-    @InjectRepository(BookTourItems)
-    private readonly bookTourItemsRepository: Repository<BookTourItems>,
+    @InjectRepository(Itinerary)
+    private readonly itineraryRepository: Repository<Itinerary>,
+    @InjectRepository(Customer)
+    private readonly customerRepository: Repository<Customer>,
+    @InjectRepository(Tourist)
+    private readonly touristRepository: Repository<Tourist>,
     @InjectRepository(AddOn)
     private readonly addOnRepository: Repository<AddOn>,
     @InjectRepository(BookingAddOn)
     private readonly bookingAddOnRepository: Repository<BookingAddOn>,
+    private readonly bookersService: BookersService,
   ) {}
 
-  // Create Book Tour
+  // ─── Generate Sequential Code TOUR-01{sequence}-{dd}-{mm}-{yy} ─────────────
+  private async generateBookingCode(): Promise<string> {
+    const count = await this.bookTourRepository.count();
+    const sequence = String(count + 1).padStart(3, '0');
+
+    const now = new Date();
+    const dd = String(now.getDate()).padStart(2, '0');
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const yy = String(now.getFullYear()).slice(-2);
+
+    return `TOUR-${sequence}-${dd}-${mm}-${yy}`;
+  }
+
+  // ─── Create Book Tour ──────────────────────────────────────────────────────
   async create(
-    userId: string,
-    createBookTourDto: CreateBookTourDto,
+    customerId: string,
+    dto: CreateBookTourDto,
   ): Promise<TourResponse> {
-    try {
-      const [findUser, findDestination] = await Promise.all([
-        this.userService.findById(userId),
-        this.destinationService.findDestinationById(
-          createBookTourDto.destination_id,
-        ),
-      ]);
+    const itinerary = await this.itineraryRepository.findOne({
+      where: {
+        id: dto.itinerary_id,
+        customer: { id: customerId },
+      },
+      relations: ['itinerary_items', 'itinerary_items.destination'],
+    });
 
-      if (!findUser) {
-        this.logger.error('User not found');
-        throw new HttpException('User not found', HttpStatus.NOT_FOUND);
-      }
-
-      if (!findDestination || !findDestination.data) {
-        this.logger.error('Destination not found');
-        throw new HttpException('Destination not found', HttpStatus.NOT_FOUND);
-      }
-
-      const countryId = findDestination.data.country_id;
-      const stateId = findDestination.data.state_id;
-
-      if (!countryId) {
-        this.logger.error('Country not found in destination');
-        throw new HttpException(
-          'Country not found in destination',
-          HttpStatus.NOT_FOUND,
-        );
-      }
-
-      if (!stateId) {
-        this.logger.error('State not found in destination');
-        throw new HttpException(
-          'State not found in destination',
-          HttpStatus.NOT_FOUND,
-        );
-      }
-
-      const now = new Date();
-      // Reset to start of day (00:00:00) using local time components to ensure accurate "today" comparison
-      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
-      const visitDate = new Date(createBookTourDto.visit_date);
-      // Reset to start of day (00:00:00) using date components
-      const newVisitDateStart = new Date(
-        visitDate.getFullYear(),
-        visitDate.getMonth(),
-        visitDate.getDate(),
+    if (!itinerary) {
+      throw new HttpException(
+        'Itinerary not found or does not belong to customer',
+        HttpStatus.NOT_FOUND,
       );
+    }
 
-      // 1. Check if visit date is earlier than today (allow today, disallow yesterday)
-      if (newVisitDateStart < today) {
-        throw new HttpException(
-          'Visit date cannot be earlier than today',
-          HttpStatus.BAD_REQUEST,
-        );
-      }
+    const bookerId = dto.booker_id;
+    const bookerName = dto.booker_name;
+    const bookerEmail = dto.booker_email;
+    const bookerPhone = dto.booker_phone;
+    const touristsList = dto.tourists || [];
 
-      // 2. Check if there's an existing DRAFT or PENDING book tour for the SAME country AND state
-      let bookTour = await this.bookTourRepository.findOne({
-        where: {
-          user: { id: findUser.data.id },
-          country: { id: countryId },
-          state: { id: stateId }, // Filter by state as well
-          status: In([StatusBookTour.DRAFT, StatusBookTour.PENDING]),
-        },
-        relations: ['book_tour_items'],
+    if (!bookerId && (!bookerName || !bookerEmail || !bookerPhone)) {
+      throw new HttpException(
+        'Data pemesan wajib diisi: Sertakan booker_id ATAU (booker_name, booker_email, booker_phone)',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    if (!touristsList || touristsList.length === 0) {
+      throw new HttpException(
+        'Tourists list is required and cannot be empty',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    // Find or create Booker profile for customer
+    const booker = await this.bookersService.findOrCreateBooker(customerId, {
+      booker_id: bookerId,
+      booker_name: bookerName,
+      booker_email: bookerEmail,
+      booker_phone: bookerPhone,
+    });
+
+    const touristCount = touristsList.length;
+    const itineraryPrice = Number(itinerary.subtotal || 0);
+    let subtotal = itineraryPrice * touristCount;
+    const code = await this.generateBookingCode();
+
+    // Initial BookTour creation
+    const bookTour = this.bookTourRepository.create({
+      code,
+      itinerary: { id: itinerary.id },
+      customer: { id: customerId },
+      booker: { id: booker.id },
+      notes: dto.notes || dto.note || undefined,
+      subtotal: subtotal,
+      tax: 0,
+      total: subtotal,
+      status: StatusBookTour.PENDING,
+    });
+
+    await this.bookTourRepository.save(bookTour);
+
+    // Batch Add-Ons lookup and bulk insert
+    let addOnsPrice = 0;
+    if (dto.add_ons && dto.add_ons.length > 0) {
+      const addOns = await this.addOnRepository.find({
+        where: { id: In(dto.add_ons) },
       });
 
-      if (bookTour) {
-        // Validation: Check if there is already a booking for the same date
-        if (bookTour.book_tour_items && bookTour.book_tour_items.length > 0) {
-          // Extract date portion from the input, adjusting to Indonesian timezone (UTC+7)
-          // The frontend sends ISO timestamps representing local time
-          // We need to convert to UTC+7 before extracting the date
-          const INDONESIA_OFFSET_MS = 7 * 60 * 60 * 1000; // UTC+7 in milliseconds
-
-          const inputDate = new Date(createBookTourDto.visit_date);
-          const indonesianDate = new Date(
-            inputDate.getTime() + INDONESIA_OFFSET_MS,
-          );
-          const newYMD = indonesianDate.toISOString().split('T')[0];
-
-          this.logger.debug(
-            `[BookTour Validation] New Date Requested: ${newYMD} (Raw: ${createBookTourDto.visit_date})`,
-          );
-
-          for (const item of bookTour.book_tour_items) {
-            let itemYMD = '';
-
-            const INDONESIA_OFFSET_MS = 7 * 60 * 60 * 1000; // UTC+7
-
-            // Extract existing item dates with timezone adjustment
-            if (typeof item.visit_date === 'string') {
-              const s = String(item.visit_date);
-              if (s.length === 10 && s.includes('-')) {
-                // Already YYYY-MM-DD format, use directly
-                itemYMD = s;
-              } else {
-                // ISO timestamp, adjust to Indonesian timezone
-                const d = new Date(s);
-                const adjusted = new Date(d.getTime() + INDONESIA_OFFSET_MS);
-                itemYMD = adjusted.toISOString().split('T')[0];
-              }
-            } else if (item.visit_date instanceof Date) {
-              const adjusted = new Date(
-                item.visit_date.getTime() + INDONESIA_OFFSET_MS,
-              );
-              itemYMD = adjusted.toISOString().split('T')[0];
-            }
-
-            this.logger.debug(
-              `[BookTour Validation] Existing Item Date: ${itemYMD} (Raw: ${item.visit_date})`,
-            );
-
-            if (itemYMD === newYMD) {
-              this.logger.warn(
-                `[BookTour Validation] Collision: ${itemYMD} === ${newYMD}. Rejecting.`,
-              );
-              throw new HttpException(
-                'You already have a booking for this date',
-                HttpStatus.BAD_REQUEST,
-              );
-            }
-          }
-        }
-
-        // Update updated_at and subtotal
-        bookTour.updated_at = new Date();
-        bookTour.subtotal =
-          Number(bookTour.subtotal) + Number(findDestination.data.price);
-        await this.bookTourRepository.save(bookTour);
-      } else {
-        // 3. If no existing tour for this country and state, create a new one
-        bookTour = this.bookTourRepository.create({
-          user: {
-            id: findUser.data.id,
-          },
-          country: {
-            id: countryId,
-          },
-          state: {
-            id: stateId,
-          },
-          status: StatusBookTour.DRAFT,
-          subtotal: findDestination.data.price,
-          created_at: new Date(),
-          updated_at: new Date(),
+      if (addOns.length > 0) {
+        const bookingAddOnsToSave = addOns.map((addOn) => {
+          addOnsPrice += Number(addOn.price || 0);
+          return this.bookingAddOnRepository.create({
+            book_tour: { id: bookTour.id },
+            add_on: { id: addOn.id },
+            price_at_booking: Number(addOn.price || 0),
+          });
         });
-        await this.bookTourRepository.save(bookTour);
+
+        await this.bookingAddOnRepository.save(bookingAddOnsToSave);
       }
-
-      // 4. Create the booking item
-      // Extract the date string to store (adjusted to Indonesian timezone UTC+7)
-      const INDONESIA_OFFSET_MS = 7 * 60 * 60 * 1000;
-      const inputDate = new Date(createBookTourDto.visit_date);
-      const indonesianDate = new Date(
-        inputDate.getTime() + INDONESIA_OFFSET_MS,
-      );
-      const visitDateToStore = indonesianDate.toISOString().split('T')[0];
-
-      const bookTourItem = this.bookTourItemsRepository.create({
-        book_tour: { id: bookTour.id },
-        destination: { id: findDestination.data.id },
-        visit_date: visitDateToStore as any, // Store as string YYYY-MM-DD
-        created_at: new Date(),
-        updated_at: new Date(),
-      });
-
-      await this.bookTourItemsRepository.save(bookTourItem);
-
-      // 5. Add add-ons if provided
-      if (createBookTourDto.add_ons && createBookTourDto.add_ons.length > 0) {
-        for (const addOnId of createBookTourDto.add_ons) {
-          const addOn = await this.addOnRepository.findOne({ where: { id: addOnId } });
-          if (addOn) {
-            const bookingAddOn = this.bookingAddOnRepository.create({
-              book_tour: { id: bookTour.id },
-              add_on: addOn,
-              price_at_booking: addOn.price,
-            });
-            await this.bookingAddOnRepository.save(bookingAddOn);
-            
-            // Update subtotal
-            bookTour.subtotal = Number(bookTour.subtotal) + Number(addOn.price);
-            await this.bookTourRepository.save(bookTour);
-          }
-        }
-      }
-
-      const findBookTour = await this.bookTourRepository.findOne({
-        where: {
-          id: bookTour.id,
-        },
-        relations: [
-          'book_tour_items',
-          'user',
-          'country',
-          'state',
-          'book_tour_items.destination',
-          'book_tour_items.destination.translations',
-          'book_tour_items.destination.state',
-          'book_tour_items.destination.state.country',
-          'add_ons',
-          'add_ons.add_on',
-        ],
-      });
-
-      if (!findBookTour) {
-        throw new HttpException(
-          'Book tour not found after creation',
-          HttpStatus.INTERNAL_SERVER_ERROR,
-        );
-      }
-
-      return {
-        message: 'Success book tour',
-        data: {
-          id: findBookTour.id,
-          user_id: findBookTour.user?.id || userId,
-          country_id: findBookTour.country?.id || countryId,
-          status: findBookTour.status,
-          subtotal: findBookTour.subtotal,
-          created_at: findBookTour.created_at,
-          updated_at: findBookTour.updated_at,
-          booking_add_ons: (findBookTour.add_ons || []).map(ba => ({
-            id: ba.id,
-            add_on_id: ba.add_on?.id,
-            name: ba.add_on?.name,
-            price: Number(ba.price_at_booking)
-          })),
-          book_tour_items: (findBookTour.book_tour_items || []).map((item) => ({
-            id: item.id,
-            destination_id: item.destination?.id,
-            destination: {
-              id: item.destination?.id,
-              location: `${item.destination?.state?.name}, ${item.destination?.state?.country?.name}`,
-              price: item.destination?.price,
-              translations: (item.destination?.translations || []).map((t) => ({
-                id: t.id,
-                language_code: t.language_code,
-                name: t.name,
-                slug: t.slug,
-                description: t.description,
-                thumbnail: t.thumbnail,
-                image: t.image,
-                detail_tour: t.detail_tour,
-                facilities: t.facilities,
-              })),
-            },
-            visit_date: item.visit_date,
-            created_at: item.created_at,
-          })),
-        },
-      };
-    } catch (error) {
-      this.logger.error(
-        `Create book tour error: ${error.message}`,
-        error.stack,
-      );
-
-      // If it's already an HttpException, just rethrow it
-      if (error instanceof HttpException) {
-        throw error;
-      }
-
-      // For other unexpected errors
-      throw new HttpException(
-        {
-          Error: [
-            {
-              field: 'general',
-              body: 'Error during create book tour',
-            },
-          ],
-        },
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
     }
+
+    // Calculate Tax & Final Totals
+    subtotal = subtotal + addOnsPrice;
+    const systemTaxPercentage = Number(process.env.TAX_PERCENTAGE || 0);
+    const tax = subtotal * (systemTaxPercentage / 100);
+    const total = subtotal + tax;
+
+    bookTour.subtotal = subtotal;
+    bookTour.tax = tax;
+    bookTour.total = total;
+
+    // Batch update bookTour status and itinerary status in parallel
+    itinerary.status = StatusItinerary.PENDING;
+
+    await Promise.all([
+      this.bookTourRepository.save(bookTour),
+      this.itineraryRepository.save(itinerary),
+    ]);
+
+    // Batch Tourists Insert
+    const touristsEntities = touristsList.map((t) =>
+      this.touristRepository.create({
+        bookTour: { id: bookTour.id },
+        name: t.name,
+        gender: t.gender,
+        phone_number: t.phone_number,
+        nationality: t.nationality,
+        passport_number: t.passport_number,
+      }),
+    );
+    await this.touristRepository.save(touristsEntities);
+
+    const detail = await this.findBookTourId(bookTour.id, customerId);
+    return {
+      message: 'Book tour created successfully',
+      data: detail.data,
+    };
   }
 
-  // Find all book tour
-  async findAll(userId: string): Promise<TourResponse> {
-    try {
-      const bookTours = await this.bookTourRepository.find({
-        where: { user: { id: userId } },
-        relations: [
-          'book_tour_items',
-          'user',
-          'country',
-          'state',
-          'book_tour_items.destination',
-          'book_tour_items.destination.translations',
-          'book_tour_items.destination.state',
-          'book_tour_items.destination.state.country',
-        ],
-        order: {
-          created_at: 'DESC',
-        },
-      });
+  // ─── Find All Customer Book Tours (QueryBuilder + Pagination) ─────────────
+  async findAll(
+    customerId: string,
+    query?: FilterBookTourDto,
+  ): Promise<TourResponse & { meta?: any }> {
+    const page = Math.max(1, Number(query?.page || 1));
+    const limit = Math.max(1, Math.min(100, Number(query?.limit || 10)));
+    const skip = (page - 1) * limit;
 
-      if (bookTours.length === 0) {
-        this.logger.error('Book tour not found');
-        throw new HttpException('Book tour not found', HttpStatus.NOT_FOUND);
-      }
+    const qb = this.bookTourRepository
+      .createQueryBuilder('bookTour')
+      .leftJoinAndSelect('bookTour.customer', 'customer')
+      .leftJoinAndSelect('bookTour.booker', 'booker')
+      .leftJoinAndSelect('bookTour.itinerary', 'itinerary')
+      .leftJoinAndSelect('itinerary.itinerary_items', 'itinerary_items')
+      .leftJoinAndSelect('itinerary_items.destination', 'destination')
+      .leftJoinAndSelect('destination.translations', 'translations')
+      .leftJoinAndSelect('itinerary.country', 'country')
+      .leftJoinAndSelect('itinerary.state', 'state')
+      .leftJoinAndSelect('bookTour.tourists', 'tourists')
+      .leftJoinAndSelect('bookTour.add_ons', 'add_ons')
+      .leftJoinAndSelect('add_ons.add_on', 'add_on')
+      .leftJoinAndSelect('bookTour.payments', 'payments')
+      .where('customer.id = :customerId', { customerId });
 
-      return {
-        message: 'Success get all book tour',
-        datas: bookTours.map((bookTour) => ({
-          id: bookTour.id,
-          user_id: bookTour.user.id,
-          country_id: bookTour.country.id,
-          status: bookTour.status,
-          subtotal: bookTour.subtotal,
-          created_at: bookTour.created_at,
-          updated_at: bookTour.updated_at,
-          booking_add_ons: (bookTour.add_ons || []).map((ba) => ({
-            id: ba.id,
-            add_on_id: ba.add_on?.id,
-            name: ba.add_on?.name,
-            price: Number(ba.price_at_booking),
-          })),
-          book_tour_items: bookTour.book_tour_items.map((item) => ({
-            id: item.id,
-            destination_id: item.destination.id,
-            destination: {
-              id: item.destination.id,
-              location: `${item.destination?.state?.name}, ${item.destination?.state?.country?.name}`,
-              price: item.destination.price,
-              translations: (item.destination.translations || []).map((t) => ({
-                id: t.id,
-                language_code: t.language_code,
-                name: t.name,
-                slug: t.slug,
-                description: t.description,
-                thumbnail: t.thumbnail,
-                image: t.image,
-                detail_tour: t.detail_tour,
-                facilities: t.facilities,
-              })),
-            },
-            visit_date: item.visit_date,
-            created_at: item.created_at,
-          })),
-        })),
-      };
-    } catch (error) {
-      this.logger.error(
-        `Find all book tour error: ${error.message}`,
-        error.stack,
-      );
+    if (query?.status) {
+      qb.andWhere('bookTour.status = :status', { status: query.status });
+    }
 
-      // If it's already an HttpException, just rethrow it
-      if (error instanceof HttpException) {
-        throw error;
-      }
+    if (query?.notes || query?.note) {
+      const notesVal = query.notes || query.note;
+      qb.andWhere('bookTour.notes LIKE :notes', { notes: `%${notesVal}%` });
+    }
 
-      // For other unexpected errors
-      throw new HttpException(
-        {
-          Error: [
-            {
-              field: 'general',
-              body: 'Error during find all book tour',
-            },
-          ],
-        },
-        HttpStatus.INTERNAL_SERVER_ERROR,
+    if (query?.search) {
+      qb.andWhere(
+        '(bookTour.code LIKE :search OR bookTour.notes LIKE :search OR tourists.name LIKE :search OR booker.name LIKE :search)',
+        { search: `%${query.search}%` },
       );
     }
+
+    const [bookTours, total] = await qb
+      .skip(skip)
+      .take(limit)
+      .orderBy('bookTour.created_at', 'DESC')
+      .getManyAndCount();
+
+    return {
+      message: 'Customer book tours retrieved successfully',
+      datas: bookTours.map((bt) => this.mapToBookTourResponse(bt)),
+      meta: {
+        page,
+        limit,
+        total,
+        totalPage: Math.ceil(total / limit),
+      },
+    };
   }
 
-  // Find book tour by id
-  async findBookTourId(id: string, userId: string): Promise<TourResponse> {
-    try {
-      const bookTour = await this.bookTourRepository.findOne({
-        where: { id, user: { id: userId } },
-        relations: [
-          'book_tour_items',
-          'user',
-          'country',
-          'state',
-          'book_tour_items.destination',
-          'book_tour_items.destination.translations',
-          'book_tour_items.destination.state',
-          'book_tour_items.destination.state.country',
-          'add_ons',
-          'add_ons.add_on',
-        ],
-      });
-      return {
-        message: 'Success get book tour',
-        data: {
-          id: bookTour.id,
-          user_id: bookTour.user.id,
-          country_id: bookTour.country.id,
-          status: bookTour.status,
-          subtotal: bookTour.subtotal,
-          created_at: bookTour.created_at,
-          updated_at: bookTour.updated_at,
-          booking_add_ons: (bookTour.add_ons || []).map((ba) => ({
-            id: ba.id,
-            add_on_id: ba.add_on?.id,
-            name: ba.add_on?.name,
-            price: Number(ba.price_at_booking),
-          })),
-          book_tour_items: bookTour.book_tour_items.map((item) => ({
-            id: item.id,
-            destination_id: item.destination.id,
-            destination: {
-              id: item.destination.id,
-              location: `${item.destination?.state?.name}, ${item.destination?.state?.country?.name}`,
-              price: item.destination.price,
-              translations: (item.destination.translations || []).map((t) => ({
-                id: t.id,
-                language_code: t.language_code,
-                name: t.name,
-                slug: t.slug,
-                description: t.description,
-                thumbnail: t.thumbnail,
-                image: t.image,
-                detail_tour: t.detail_tour,
-                facilities: t.facilities,
-              })),
-            },
-            visit_date: item.visit_date,
-            created_at: item.created_at,
-          })),
-        },
-      };
-    } catch (error) {
-      this.logger.error(`Find book tour error: ${error.message}`, error.stack);
+  // ─── Find Book Tour by ID ──────────────────────────────────────────────────
+  async findBookTourId(id: string, customerId: string): Promise<TourResponse> {
+    const bookTour = await this.bookTourRepository.findOne({
+      where: { id, customer: { id: customerId } },
+      relations: BOOK_TOUR_RELATIONS,
+    });
 
-      // If it's already an HttpException, just rethrow it
-      if (error instanceof HttpException) {
-        throw error;
-      }
-
-      // For other unexpected errors
-      throw new HttpException(
-        {
-          Error: [
-            {
-              field: 'general',
-              body: 'Error during find book tour',
-            },
-          ],
-        },
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
+    if (!bookTour) {
+      throw new NotFoundException(`Book tour with ID ${id} not found`);
     }
+
+    return {
+      message: `Book tour with ID ${id} found successfully`,
+      data: this.mapToBookTourResponse(bookTour),
+    };
   }
-  // update status book tour
+
+  // ─── Update Status Book Tour ───────────────────────────────────────────────
   async updateStatusBookTour(
     id: string,
     status: StatusBookTour,
   ): Promise<TourResponse> {
-    try {
-      // check book tour is exists
-      const bookTour = await this.bookTourRepository.findOne({
-        where: { id },
-        relations: [
-          'book_tour_items',
-          'user',
-          'country',
-          'state',
-          'book_tour_items.destination',
-          'book_tour_items.destination.translations',
-          'book_tour_items.destination.state',
-          'book_tour_items.destination.state.country',
-        ],
-      });
-      if (!bookTour) {
-        this.logger.error('Book tour not found');
-        throw new HttpException('Book tour not found', HttpStatus.NOT_FOUND);
-      }
-      await this.bookTourRepository.update(id, {
-        status: status,
-      });
-      return {
-        message: 'Success update book tour',
-        data: {
-          id: bookTour.id,
-          user_id: bookTour.user.id,
-          country_id: bookTour.country.id,
-          status: bookTour.status,
-          subtotal: bookTour.subtotal,
-          created_at: bookTour.created_at,
-          updated_at: bookTour.updated_at,
-          booking_add_ons: (bookTour.add_ons || []).map((ba) => ({
-            id: ba.id,
-            add_on_id: ba.add_on?.id,
-            name: ba.add_on?.name,
-            price: Number(ba.price_at_booking),
-          })),
-          book_tour_items: bookTour.book_tour_items.map((item) => ({
-            id: item.id,
-            destination_id: item.destination.id,
-            destination: {
-              id: item.destination.id,
-              location: `${item.destination?.state?.name}, ${item.destination?.state?.country?.name}`,
-              price: item.destination.price,
-              translations: (item.destination.translations || []).map((t) => ({
-                id: t.id,
-                language_code: t.language_code,
-                name: t.name,
-                slug: t.slug,
-                description: t.description,
-                thumbnail: t.thumbnail,
-                image: t.image,
-                detail_tour: t.detail_tour,
-                facilities: t.facilities,
-              })),
-            },
-            visit_date: item.visit_date,
-            created_at: item.created_at,
-          })),
-        },
-      };
-    } catch (error) {
-      this.logger.error(`Error during update book tour: ${error.message}`);
-      throw new HttpException(
-        {
-          Error: [
-            {
-              field: 'general',
-              body: 'Error during update book tour',
-            },
-          ],
-        },
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
-  }
-  // Update book tour
-  async update(
-    id: string,
-    userId: string,
-    updateBookTourDto: UpdateBookTourDto,
-  ): Promise<TourResponse> {
     const bookTour = await this.bookTourRepository.findOne({
-      where: { id, user: { id: userId } },
-      relations: [
-        'add_ons',
-        'add_ons.add_on',
-        'book_tour_items',
-        'book_tour_items.destination',
-      ],
+      where: { id },
+      relations: BOOK_TOUR_RELATIONS,
     });
 
     if (!bookTour) {
-      throw new HttpException('Book tour not found', HttpStatus.NOT_FOUND);
+      throw new NotFoundException(`Book tour with ID ${id} not found`);
     }
 
-    if (updateBookTourDto.status) {
-      bookTour.status = updateBookTourDto.status as any;
-    }
+    await this.bookTourRepository.update(id, { status });
 
-    if (updateBookTourDto.add_ons) {
-      // Remove existing add-ons
-      if (bookTour.add_ons && bookTour.add_ons.length > 0) {
-        await this.bookingAddOnRepository.remove(bookTour.add_ons);
-      }
+    if (bookTour.itinerary) {
+      const statusMap: Record<StatusBookTour, StatusItinerary> = {
+        [StatusBookTour.PENDING]: StatusItinerary.PENDING,
+        [StatusBookTour.CONFIRMED]: StatusItinerary.CONFIRMED,
+        [StatusBookTour.ONGOING]: StatusItinerary.ONGOING,
+        [StatusBookTour.COMPLETED]: StatusItinerary.COMPLETED,
+        [StatusBookTour.CANCELLED]: StatusItinerary.CANCELLED,
+      };
 
-      // Add new ones
-      let addOnsPrice = 0;
-      const newBookingAddOns: BookingAddOn[] = [];
-
-      for (const addOnId of updateBookTourDto.add_ons) {
-        const addOn = await this.addOnRepository.findOne({
-          where: { id: addOnId },
+      const itineraryStatus = statusMap[status];
+      if (itineraryStatus) {
+        await this.itineraryRepository.update(bookTour.itinerary.id, {
+          status: itineraryStatus,
         });
-        if (addOn) {
-          const bookingAddOn = new BookingAddOn();
-          bookingAddOn.book_tour = bookTour;
-          bookingAddOn.add_on = addOn;
-          bookingAddOn.price_at_booking = addOn.price;
-          newBookingAddOns.push(bookingAddOn);
-          addOnsPrice += Number(addOn.price);
-        }
       }
-
-      if (newBookingAddOns.length > 0) {
-        await this.bookingAddOnRepository.save(newBookingAddOns);
-      }
-
-      // Recalculate subtotal
-      const itemsSubtotal = (bookTour.book_tour_items || []).reduce(
-        (acc, item) => acc + Number(item.destination?.price || 0),
-        0,
-      );
-      bookTour.subtotal = itemsSubtotal + addOnsPrice;
     }
 
-    const updated = await this.bookTourRepository.save(bookTour);
-    return this.findBookTourId(updated.id, userId);
+    bookTour.status = status;
+
+    return {
+      message: `Book tour with ID ${id} status updated to ${status} successfully`,
+      data: this.mapToBookTourResponse(bookTour),
+    };
+  }
+
+  // ─── Delete Book Tour (Soft Remove) ────────────────────────────────────────
+  async remove(id: string, customerId?: string): Promise<TourResponse> {
+    const where: any = { id };
+    if (customerId) {
+      where.customer = { id: customerId };
+    }
+
+    const bookTour = await this.bookTourRepository.findOne({ where });
+    if (!bookTour) {
+      throw new NotFoundException(`Book tour with ID ${id} not found`);
+    }
+
+    await this.bookTourRepository.softRemove(bookTour);
+
+    return {
+      message: `Book tour with ID ${id} deleted successfully`,
+    };
+  }
+
+  // ─── Helper Mapper ─────────────────────────────────────────────────────────
+  private mapToBookTourResponse(bookTour: BookTour) {
+    return {
+      id: bookTour.id,
+      code: bookTour.code,
+      itinerary_id: bookTour.itinerary?.id || '',
+      customer_id: bookTour.customer?.id || '',
+      booker_id: bookTour.booker?.id || '',
+      booker: bookTour.booker
+        ? {
+            id: bookTour.booker.id,
+            name: bookTour.booker.name,
+            email: bookTour.booker.email,
+            phone_number: bookTour.booker.phone_number,
+          }
+        : undefined,
+      subtotal: Number(bookTour.subtotal),
+      tax: Number(bookTour.tax),
+      total: Number(bookTour.total),
+      status: bookTour.status,
+      notes: bookTour.notes || null,
+      note: bookTour.notes || null,
+      created_at: bookTour.created_at,
+      updated_at: bookTour.updated_at,
+      itinerary: bookTour.itinerary as any,
+      tourists: (bookTour.tourists || []).map((t) => ({
+        id: t.id,
+        name: t.name,
+        gender: t.gender,
+        phone_number: t.phone_number,
+        nationality: t.nationality,
+        passport_number: t.passport_number,
+      })),
+      booking_add_ons: (bookTour.add_ons || []).map((ba) => ({
+        id: ba.id,
+        add_on_id: ba.add_on?.id,
+        name: ba.add_on?.name,
+        price: Number(ba.price_at_booking),
+      })),
+    };
   }
 }

@@ -1,6 +1,20 @@
 import { ResponseModel } from "./response.type";
 
+export class MerekData {
+  id: string;
+  name_merek: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+export class MerekResponse extends ResponseModel<MerekData> {
+  message: string;
+  data?: MerekData;
+  datas?: MerekData[];
+}
+
 export class MotorTranslationData {
+  id?: string;
   language_code: string;
   name_motor: string;
   slug: string;
@@ -18,33 +32,23 @@ export class MotorPriceData {
   price: number;
 }
 
-export class MerekData {
-  id: string;
-  name_merek: string;
-  createdAt?: Date;
-  updatedAt?: Date;
-}
-
-export class MerekResponse extends ResponseModel<MerekData> {
-  message: string;
-  data?: MerekData;
-  datas?: MerekData[];
-}
-
 export class MotorData {
   id: string;
+  merek_id: string;
+  state_id: string;
+  country_id: string;
   engine_cc: number;
   thumbnail: string;
   is_available: boolean;
-  merek?: MerekData;
-  state?: any; // You can define StateData if needed
   translations?: MotorTranslationData[];
   variants?: VariantData[];
   motor_prices?: MotorPriceData[];
+  created_at?: Date;
+  updated_at?: Date;
 }
 
 export class MotorResponse extends ResponseModel<MotorData> {
   message: string;
-  data?: MotorData;
+  data?: MotorData | MotorData[] | any;
   datas?: MotorData[];
 }

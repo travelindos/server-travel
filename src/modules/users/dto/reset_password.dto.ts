@@ -5,7 +5,7 @@ import {
   Matches,
   MinLength,
 } from 'class-validator';
-import { Match } from 'src/common/decorators/match.decorator';
+import { Match } from '../../../common/decorators/match.decorator';
 
 export class ResetPasswordDto {
   @IsNotEmpty({ message: 'Reset token is required' })

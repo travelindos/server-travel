@@ -33,7 +33,7 @@ export class PaypalService {
       const accessToken = authData.access_token;
 
       return accessToken;
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error('Failed to auth paypal');
       if (error instanceof Error) {
         throw error;
@@ -67,6 +67,20 @@ export class PaypalService {
       if (!captureResponse.ok) {
         const issue = captureData?.details?.[0]?.issue;
         const description = captureData?.details?.[0]?.description || captureData?.message;
+
+        // Tangani jika order sudah pernah di-capture sebelumnya
+        if (
+          issue === 'ORDER_ALREADY_CAPTURED' ||
+          description?.toLowerCase()?.includes('already captured')
+        ) {
+          this.logger.warn(`PayPal order ${transactionId} was already captured`);
+          return {
+            payerEmail: captureData?.payer?.email_address || null,
+            status: 'COMPLETED',
+            raw: captureData,
+            alreadyCaptured: true,
+          };
+        }
 
         // Khusus: tangani error ketika sudah terlalu banyak mencoba
         if (issue === 'MAX_NUMBER_OF_PAYMENT_ATTEMPTS_EXCEEDED') {

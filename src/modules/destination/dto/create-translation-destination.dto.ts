@@ -16,14 +16,6 @@ export class CreateTranslationDestinationDto {
   @IsEnum(Language, { message: 'Language must be a enum' })
   language_code: Language;
 
-  @IsNotEmpty({ message: 'Thumbnail is required' })
-  @IsString({ message: 'Thumbnail must be a string' })
-  thumbnail: string;
-
-  @IsNotEmpty({ message: 'Image is required' })
-  @IsArray({ message: 'Image must be an array string' })
-  image: string[];
-
   @IsNotEmpty({ message: 'Detail Tour is required' })
   @IsArray({ message: 'Detail Tour must be an array string' })
   detail_tour: string[];

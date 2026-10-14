@@ -5,20 +5,21 @@ import {
   CreateDateColumn,
   DeleteDateColumn,
   Entity,
+  Index,
   JoinColumn,
-  JoinTable,
-  ManyToMany,
   ManyToOne,
   OneToMany,
   PrimaryColumn,
   UpdateDateColumn,
+  VersionColumn,
 } from 'typeorm';
-import { User } from 'src/modules/users/entities/user.entity';
-import { BookingAddOn } from 'src/modules/add-ons/entities/booking-add-on.entity';
+import { User } from '../../users/entities/user.entity';
+import { Customer } from '../../customers/entities/customer.entity';
+import { Booker } from '../../bookers/entities/booker.entity';
+import { BookingAddOn } from '../../add-ons/entities/booking-add-on.entity';
 import { BookMotorItem } from './book-motor-item.entity';
-import { Tourist } from 'src/modules/tourists/entities/tourist.entity';
-import { Payment } from 'src/modules/payments/entities/payment.entity';
-import { Sale } from 'src/modules/sales/entities/sale.entity';
+import { Tourist } from '../../tourists/entities/tourist.entity';
+import { Payment } from '../../payments/entities/payment.entity';
 
 export enum StatusBookMotor {
   DRAFT = 'draft',
@@ -27,6 +28,7 @@ export enum StatusBookMotor {
   ONGOING = 'ongoing',
   COMPLETED = 'completed',
   CANCELLED = 'cancelled',
+  EXPIRED = 'expired',
 }
 
 @Entity('book_motors')
@@ -44,9 +46,17 @@ export class BookMotor {
     }
   }
 
-  @ManyToOne(() => User)
+  @ManyToOne(() => Customer, { onDelete: 'SET NULL', nullable: true })
+  @JoinColumn({ name: 'customer_id' })
+  customer?: Customer;
+
+  @ManyToOne(() => Booker, { onDelete: 'SET NULL', nullable: true })
+  @JoinColumn({ name: 'booker_id' })
+  booker?: Booker;
+
+  @ManyToOne(() => User, { onDelete: 'SET NULL', nullable: true })
   @JoinColumn({ name: 'user_id' })
-  user: User;
+  user?: User;
 
   @Column({
     type: 'enum',
@@ -75,14 +85,20 @@ export class BookMotor {
   @OneToMany(() => Payment, (payment) => payment.bookMotor)
   payments: Payment[];
 
-  @OneToMany(() => Sale, (sale) => sale.bookMotor)
-  sales: Sale[];
-
   @Column({ type: 'timestamp', nullable: true })
   start_date: Date;
 
   @Column({ type: 'timestamp', nullable: true })
   end_date: Date;
+
+  @Column({ type: 'timestamp', nullable: true })
+  expired_at?: Date;
+
+  @Column({ type: 'text', nullable: true })
+  notes?: string;
+
+  @VersionColumn({ default: 1 })
+  version: number;
 
   @CreateDateColumn()
   created_at: Date;

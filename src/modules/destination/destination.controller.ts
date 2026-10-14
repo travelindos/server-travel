@@ -8,27 +8,25 @@ import {
   Param,
   Post,
   Put,
+  Query,
 } from '@nestjs/common';
-import { Public } from 'src/common/decorators/public.decorator';
-import { Roles } from 'src/common/decorators/roles.decorator';
-import { WebResponse } from 'src/types/response/response.type';
+import { Public } from '../../common/decorators/public.decorator';
+import { Permissions } from '../../common/decorators/permissions.decorator';
+import { WebResponse } from '../../types/response/response.type';
 import { DestinationService } from './destination.service';
 import {
   CreateDestinationDto,
   UpdateDestinationDto,
 } from './dto/create-destination.dto';
-import {
-  CreateTranslationDestinationDto,
-  UpdateTranslationDestinationDto,
-} from './dto/create-translation-destination.dto';
+import { FilterDestinationDto } from './dto/filter-destination.dto';
 
-@Controller('destination')
+@Controller('destinations')
 export class DestinationController {
   constructor(private readonly destinationService: DestinationService) {}
 
-  // create destination
-  @Roles('admin', 'owner', 'developer')
-  @Post('/create')
+  // POST /destinations or /entertainment-attractions
+  @Permissions('destinations:create')
+  @Post()
   @HttpCode(HttpStatus.CREATED)
   async create(@Body() reqDto: CreateDestinationDto): Promise<WebResponse> {
     const result = await this.destinationService.create(reqDto);
@@ -38,37 +36,25 @@ export class DestinationController {
     };
   }
 
-  // create translation destination
-  @Roles('admin', 'owner', 'developer')
-  @Post('/:id/translation')
-  @HttpCode(HttpStatus.CREATED)
-  async createTranslation(
-    @Param('id') id: string,
-    @Body() reqDto: CreateTranslationDestinationDto,
-  ): Promise<WebResponse> {
-    const result = await this.destinationService.createTranslation(id, reqDto);
-    return {
-      message: result.message,
-      data: result.data,
-    };
-  }
-
-  // find all destination with translation
+  // GET /destinations or /entertainment-attractions
   @Public()
-  @Get('/find-all-destination-with-translation')
+  @Get()
   @HttpCode(HttpStatus.OK)
-  async findAllDestinationWithTranslation(): Promise<WebResponse> {
+  async findAllDestinationWithTranslation(
+    @Query() query: FilterDestinationDto,
+  ): Promise<WebResponse> {
     const result =
-      await this.destinationService.findAllDestinationWithTranslation();
+      await this.destinationService.findAllDestinationWithTranslation(query);
     return {
       message: result.message,
       data: result.datas,
+      meta: result.meta,
     };
   }
 
-  // find all categories destination
+  // GET /destinations/categories or /entertainment-attractions/categories
   @Public()
-  @Get('/find-all-categories-destination')
+  @Get('categories')
   @HttpCode(HttpStatus.OK)
   async findAllCategoriesDestination(): Promise<WebResponse> {
     const result = await this.destinationService.findCategoryDestination();
@@ -78,9 +64,9 @@ export class DestinationController {
     };
   }
 
-  // find destination by slug
+  // GET /destinations/slug/:slug or /entertainment-attractions/slug/:slug
   @Public()
-  @Get('/:slug')
+  @Get('slug/:slug')
   @HttpCode(HttpStatus.OK)
   async findBySlug(@Param('slug') slug: string): Promise<WebResponse> {
     const result = await this.destinationService.findDestinationBySlug(slug);
@@ -90,9 +76,9 @@ export class DestinationController {
     };
   }
 
-  // find destination by id
+  // GET /destinations/:id or /entertainment-attractions/:id
   @Public()
-  @Get('/find/:id')
+  @Get(':id')
   @HttpCode(HttpStatus.OK)
   async findById(@Param('id') id: string): Promise<WebResponse> {
     const result = await this.destinationService.findDestinationById(id);
@@ -102,9 +88,9 @@ export class DestinationController {
     };
   }
 
-  // update destination
-  @Roles('admin', 'owner', 'developer')
-  @Put('/:id/update')
+  // PUT /destinations/:id or /entertainment-attractions/:id
+  @Permissions('destinations:update')
+  @Put(':id')
   @HttpCode(HttpStatus.OK)
   async update(
     @Param('id') id: string,
@@ -117,27 +103,9 @@ export class DestinationController {
     };
   }
 
-  // update translation destination
-  @Roles('admin', 'owner', 'developer')
-  @Put('/:id/update-translation')
-  @HttpCode(HttpStatus.OK)
-  async updateTranslation(
-    @Param('id') id: string,
-    @Body() reqDto: UpdateTranslationDestinationDto,
-  ): Promise<WebResponse> {
-    const result = await this.destinationService.updateDestinationTranslation(
-      id,
-      reqDto,
-    );
-    return {
-      message: result.message,
-      data: result.data,
-    };
-  }
-
-  // delete destination with translation
-  @Roles('admin', 'owner', 'developer')
-  @Delete('/:id/delete')
+  // DELETE /destinations/:id or /entertainment-attractions/:id
+  @Permissions('destinations:delete')
+  @Delete(':id')
   @HttpCode(HttpStatus.OK)
   async delete(@Param('id') id: string): Promise<WebResponse> {
     const result = await this.destinationService.deleteDestination(id);

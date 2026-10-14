@@ -9,4 +9,12 @@ export class UpdateBookTourDto {
   @IsOptional()
   @IsString()
   status?: string;
+
+  @IsOptional()
+  @IsString()
+  notes?: string;
+
+  @IsOptional()
+  @IsString()
+  note?: string;
 }

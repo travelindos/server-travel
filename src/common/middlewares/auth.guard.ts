@@ -5,8 +5,11 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { InjectRepository } from '@nestjs/typeorm';
 import * as crypto from 'crypto';
+import { Repository } from 'typeorm';
 import { SessionService } from '../../modules/session/session.service';
+import { CustomerSession } from '../../modules/customers/entities/customer-session.entity';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 
 @Injectable()
@@ -14,6 +17,8 @@ export class AuthGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
     private readonly sessionService: SessionService,
+    @InjectRepository(CustomerSession)
+    private readonly customerSessionRepository: Repository<CustomerSession>,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -39,30 +44,44 @@ export class AuthGuard implements CanActivate {
     // hash token
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
 
+    // 1. Check User/Admin Session
     const session = await this.sessionService.findValidSession(tokenHash);
 
-    if (!session) {
-      throw new UnauthorizedException('Invalid or expired session');
+    if (session) {
+      request['user'] = {
+        id: session.user.id,
+        email: session.user.email,
+        role: session.user.role?.code,
+        roleLevel: session.user.role?.level,
+        permissions: session.user.role?.permissions || [],
+      };
+      request['token'] = token;
+      return true;
     }
 
-    // inject user ke request
-    /*
-      Assuming 'level' isn't explicitly on role but on some other property, or if role is an object with code. The user request showed 'role: session.user.role.code', but types suggest role is Relation<Role>. I'll stick to user logic.
-      // Wait, let's keep it safe. If request.user was a User entity before, changing it to a plain object might break things downstream if they expect User methods.
-      // The user request explicitly said:
-      // request.user = { id: ..., email: ..., role: ..., roleLevel: ... }
-      // The original code was attaching `session.user` (Entity).
-      // I will follow the user's explicit request for the new guard.
-    **/
-    request['user'] = {
-      id: session.user.id,
-      email: session.user.email,
-      role: session.user.role.code,
-    };
+    // 2. Check Customer Session (for customer authentication)
+    const customerSession = await this.customerSessionRepository.findOne({
+      where: { token: tokenHash },
+      relations: ['customer'],
+    });
 
-    // Also keeping the original token attachment if needed
-    request['token'] = token;
+    if (
+      customerSession &&
+      (!customerSession.expiresAt || new Date() <= customerSession.expiresAt)
+    ) {
+      if (customerSession.customer && !customerSession.customer.deletedAt) {
+        request['customer'] = {
+          id: customerSession.customer.id,
+          name: customerSession.customer.name,
+          email: customerSession.customer.email,
+          phone_number: customerSession.customer.phone_number,
+          is_verified: customerSession.customer.is_verified,
+        };
+        request['token'] = token;
+        return true;
+      }
+    }
 
-    return true;
+    throw new UnauthorizedException('Invalid or expired session');
   }
 }

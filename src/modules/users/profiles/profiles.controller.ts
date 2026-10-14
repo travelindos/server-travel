@@ -9,8 +9,8 @@ import {
   Post,
   Put,
 } from '@nestjs/common';
-import { CurrentUser } from 'src/common/decorators/user.decorator';
-import { ProfileResponse } from 'src/types/response/profile.type';
+import { CurrentUser } from '../../../common/decorators/user.decorator';
+import { ProfileResponse } from '../../../types/response/profile.type';
 import { CreateProfileDto, UpdateProfileDto } from '../dto/profile.dto';
 import { ProfilesService } from './profiles.service';
 

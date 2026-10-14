@@ -1,5 +1,20 @@
 import { ResponseModel } from './response.type';
 
+export class ResponseCity {
+  id: string;
+  name: string;
+  longitude: string;
+  latitude: string;
+}
+
+export class ResponseState {
+  id: string;
+  name: string;
+  longitude: string;
+  latitude: string;
+  cities?: ResponseCity[];
+}
+
 export class ResponseData {
   id: string;
   name: string;
@@ -7,12 +22,7 @@ export class ResponseData {
   phone_code: string;
   currency: string;
   flag: string;
-  cities?: {
-    id: string;
-    name: string;
-    longitude: string;
-    latitude: string;
-  }[];
+  states?: ResponseState[];
 }
 
 export class LocationResponseModel extends ResponseModel<ResponseData> {

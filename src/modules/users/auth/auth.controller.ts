@@ -10,12 +10,12 @@ import {
   Res,
 } from '@nestjs/common';
 import { Response } from 'express';
-import { Public } from 'src/common/decorators/public.decorator';
+import { Public } from '../../../common/decorators/public.decorator';
 import {
   CurrentToken,
   CurrentUser,
-} from 'src/common/decorators/user.decorator';
-import { WebResponse } from 'src/types/response/response.type';
+} from '../../../common/decorators/user.decorator';
+import { WebResponse } from '../../../types/response/response.type';
 import { EmailReqDto } from '../dto/email_req.dto';
 import { LoginDto } from '../dto/login.dto';
 import { RegisterDto } from '../dto/register.dto';
@@ -42,9 +42,13 @@ export class AuthController {
   @Post('verify-account')
   @HttpCode(HttpStatus.OK)
   async verifyAccount(
-    @Query('verify_code') verify_token: string,
+    @Query('verify_token') queryToken?: string,
+    @Query('verify_code') queryCode?: string,
+    @Body('verify_token') bodyToken?: string,
+    @Body('verify_code') bodyCode?: string,
   ): Promise<WebResponse> {
-    const response = await this.authService.verifyAccount(verify_token);
+    const token = queryToken || queryCode || bodyToken || bodyCode || '';
+    const response = await this.authService.verifyAccount(token);
     return {
       message: response.message,
       data: response.data,

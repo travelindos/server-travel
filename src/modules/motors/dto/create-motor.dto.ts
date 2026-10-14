@@ -1,5 +1,5 @@
 import { PartialType } from "@nestjs/mapped-types";
-import { IsArray, IsBoolean, IsNotEmpty, IsNumber, IsString, ValidateNested } from "class-validator";
+import { IsArray, IsBoolean, IsNotEmpty, IsNumber, IsOptional, IsString, ValidateNested } from "class-validator";
 import { Type } from "class-transformer";
 import { CreateMotorTranslationDto } from "./create-motor-translation.dto";
 import { CreateMotorVariantDto } from "./create-motor-variant.dto";
@@ -26,23 +26,27 @@ export class CreateMotorDto {
   @IsNotEmpty()
   state_id: string;
 
+  @IsOptional()
+  @IsString()
+  country_id?: string;
+
+  @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => CreateMotorTranslationDto)
-  @IsNotEmpty()
-  translations: CreateMotorTranslationDto[];
+  translations?: CreateMotorTranslationDto[];
 
+  @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => CreateMotorVariantDto)
-  @IsNotEmpty()
-  variants: CreateMotorVariantDto[];
+  variants?: CreateMotorVariantDto[];
 
+  @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => CreateMotorPriceDto)
-  @IsNotEmpty()
-  prices: CreateMotorPriceDto[];
+  prices?: CreateMotorPriceDto[];
 }
 
 export class UpdateMotorDto extends PartialType(CreateMotorDto) {}

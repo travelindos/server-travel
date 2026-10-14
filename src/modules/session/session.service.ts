@@ -14,32 +14,27 @@ export class SessionService {
   ) {}
 
   async findValidSession(tokenHash: string): Promise<any> {
-    try {
-      const session = await this.sessionRepository.findOne({
-        where: { token: tokenHash },
-        relations: ['user', 'user.role'],
-      });
+    const session = await this.sessionRepository.findOne({
+      where: { token: tokenHash },
+      relations: ['user', 'user.role'],
+    });
 
-      if (!session) {
-        this.logger.error('SessionService: Token not found in DB');
-        return null;
-      }
-
-      if (session.expiresAt && new Date() > session.expiresAt) {
-        this.logger.error(
-          'SessionService: Session expired. Current:',
-          new Date(),
-          'Expires:',
-          session.expiresAt,
-        );
-        await this.sessionRepository.remove(session);
-        return null;
-      }
-      return session;
-    } catch (error) {
-      this.logger.error('Error finding valid session', error);
-      throw error;
+    if (!session) {
+      this.logger.error('SessionService: Token not found in DB');
+      return null;
     }
+
+    if (session.expiresAt && new Date() > session.expiresAt) {
+      this.logger.error(
+        'SessionService: Session expired. Current:',
+        new Date(),
+        'Expires:',
+        session.expiresAt,
+      );
+      await this.sessionRepository.remove(session);
+      return null;
+    }
+    return session;
   }
 
   async createSession(
@@ -48,34 +43,24 @@ export class SessionService {
     expiresAt: Date,
     ip: string,
   ): Promise<any> {
-    try {
-      const session = this.sessionRepository.create({
-        token: tokenHash,
-        user: user,
-        expiresAt: expiresAt,
-        ip: ip,
-      });
-      return this.sessionRepository.save(session);
-    } catch (error) {
-      this.logger.error('Error creating session', error);
-      throw error;
-    }
+    const session = this.sessionRepository.create({
+      token: tokenHash,
+      user: user,
+      expiresAt: expiresAt,
+      ip: ip,
+    });
+    return this.sessionRepository.save(session);
   }
 
   async removeSession(tokenHash: string): Promise<void> {
-    try {
-      const session = await this.sessionRepository.findOne({
-        where: { token: tokenHash },
-      });
+    const session = await this.sessionRepository.findOne({
+      where: { token: tokenHash },
+    });
 
-      if (!session) {
-        this.logger.error('SessionService: Token not found in DB');
-        return;
-      }
-      await this.sessionRepository.remove(session);
-    } catch (error) {
-      this.logger.error('Error removing session', error);
-      throw error;
+    if (!session) {
+      this.logger.error('SessionService: Token not found in DB');
+      return;
     }
+    await this.sessionRepository.remove(session);
   }
 }

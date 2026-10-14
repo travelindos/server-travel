@@ -1,15 +1,15 @@
 import { Controller, Get, Post, Body, Param, Delete, Put, HttpCode, HttpStatus } from '@nestjs/common';
 import { AddOnsService } from './add-ons.service';
 import { CreateAddOnDto, UpdateAddOnDto } from './dto/create-add-on.dto';
-import { WebResponse } from 'src/types/response/response.type';
-import { Roles } from 'src/common/decorators/roles.decorator';
-import { Public } from 'src/common/decorators/public.decorator';
+import { WebResponse } from '../../types/response/response.type';
+import { Permissions } from '../../common/decorators/permissions.decorator';
+import { Public } from '../../common/decorators/public.decorator';
 
 @Controller('add-ons')
 export class AddOnsController {
   constructor(private readonly addOnsService: AddOnsService) {}
 
-  @Roles('owner, admin', 'developer')
+  @Permissions('addons:create')
   @Post('create')
   @HttpCode(HttpStatus.CREATED)
   async create(@Body() createAddOnDto: CreateAddOnDto): Promise<WebResponse> {
@@ -21,6 +21,7 @@ export class AddOnsController {
   }
 
   @Get('find-all')
+  @Permissions('addons:read')
   @HttpCode(HttpStatus.OK)
   async findAll(): Promise<WebResponse> {
     const result = await this.addOnsService.findAll();
@@ -31,6 +32,7 @@ export class AddOnsController {
   }
 
   @Get(':id')
+  @Permissions('addons:read')
   @HttpCode(HttpStatus.OK)
   async findOne(@Param('id') id: string): Promise<WebResponse> {
     const result = await this.addOnsService.findOne(id);
@@ -51,7 +53,7 @@ export class AddOnsController {
     };
   }
 
-  @Roles('owner, admin', 'developer')
+  @Permissions('addons:update')
   @Put('update/:id')
   @HttpCode(HttpStatus.OK)
   async update(@Param('id') id: string, @Body() updateAddOnDto: UpdateAddOnDto): Promise<WebResponse> {
@@ -62,7 +64,7 @@ export class AddOnsController {
     };
   }
 
-  @Roles('owner, admin', 'developer')
+  @Permissions('addons:delete')
   @Delete('delete/:id')
   @HttpCode(HttpStatus.OK)
   async remove(@Param('id') id: string): Promise<WebResponse> {

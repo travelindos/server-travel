@@ -10,6 +10,8 @@ export class AuthData {
     id: string;
     name: string;
     code: string;
+    level?: number;
+    permissions?: string[];
   };
   session?: string;
 }

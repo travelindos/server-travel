@@ -36,8 +36,4 @@ export class RegisterDto {
   @IsOptional()
   @IsString({ message: 'Role ID must be a string' })
   role_id?: string;
-
-  @IsOptional()
-  @IsString({ message: 'Site must be a string' })
-  site?: string;
 }

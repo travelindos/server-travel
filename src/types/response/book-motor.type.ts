@@ -1,10 +1,9 @@
-import { StatusBookMotor } from 'src/modules/book-motors/entities/book-motor.entity';
+import { StatusBookMotor } from '../../modules/book-motors/entities/book-motor.entity';
 import { ResponseModel } from './response.type';
 
 export class BookMotorItemData {
   id: string;
   motor_id: string;
-  motor_name: string;
   price: number;
   qty: number;
   subtotal: number;
@@ -26,11 +25,22 @@ export class BookingAddOnData {
 
 export class BookMotorData {
   id: string;
-  user_id: string;
+  customer_id?: string;
+  booker_id?: string;
+  booker?: {
+    id: string;
+    name: string;
+    email: string;
+    phone_number: string;
+  } | null;
+  user_id?: string;
   start_date: Date;
   end_date: Date;
+  expired_at?: Date;
   total_price: number;
   status: StatusBookMotor;
+  notes?: string | null;
+  note?: string | null;
   book_motor_items: BookMotorItemData[];
   tourists: BookMotorTouristData[];
   booking_add_ons: BookingAddOnData[];

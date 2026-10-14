@@ -1,7 +1,7 @@
 import { BeforeInsert, Column, CreateDateColumn, DeleteDateColumn, Entity, JoinColumn, ManyToOne, PrimaryColumn, UpdateDateColumn } from "typeorm";
 import { BookMotor } from "./book-motor.entity";
 import Hashids from "hashids";
-import { Motor } from "src/modules/motors/entities/motor.entity";
+import { Motor } from '../../motors/entities/motor.entity';
 
 @Entity('book_motor_items')
 export class BookMotorItem {

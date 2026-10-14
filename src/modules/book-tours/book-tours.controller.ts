@@ -1,33 +1,39 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
   Param,
+  Patch,
   Post,
-  Put,
+  Query,
+  UseGuards,
 } from '@nestjs/common';
-import { Roles } from 'src/common/decorators/roles.decorator';
-import { CurrentUser } from 'src/common/decorators/user.decorator';
-import { WebResponse } from 'src/types/response/response.type';
+import { CustomerAuthGuard } from '../../common/middlewares/customer-auth.guard';
+import { GetCustomer } from '../../common/decorators/get-customer.decorator';
+import { Permissions } from '../../common/decorators/permissions.decorator';
+import { CustomerAuthData } from '../../types/response/customers.type';
+import { WebResponse } from '../../types/response/response.type';
 import { BookToursService } from './book-tours.service';
 import { CreateBookTourDto } from './dto/create-book-tour.dto';
-import { UpdateBookTourDto } from './dto/update-book-tour.dto';
+import { FilterBookTourDto } from './dto/filter-book-tour.dto';
 
 @Controller('book-tours')
+@UseGuards(CustomerAuthGuard)
 export class BookToursController {
   constructor(private readonly bookToursService: BookToursService) {}
 
-  @Roles('traveller')
-  @Post('create')
-  @HttpCode(HttpStatus.OK)
+  // POST /book-tours (Create Book Tour)
+  @Post()
+  @HttpCode(HttpStatus.CREATED)
   async create(
-    @CurrentUser() user: any,
+    @GetCustomer() customer: CustomerAuthData,
     @Body() createBookTourDto: CreateBookTourDto,
   ): Promise<WebResponse> {
     const result = await this.bookToursService.create(
-      user.id,
+      customer.id,
       createBookTourDto,
     );
     return {
@@ -36,33 +42,38 @@ export class BookToursController {
     };
   }
 
-  @Roles('traveller')
-  @Get('find-all')
+  // GET /book-tours (Find All Customer Book Tours)
+  @Get()
   @HttpCode(HttpStatus.OK)
-  async findAll(@CurrentUser() user: any): Promise<WebResponse> {
-    const result = await this.bookToursService.findAll(user.id);
+  async findAll(
+    @GetCustomer() customer: CustomerAuthData,
+    @Query() query: FilterBookTourDto,
+  ): Promise<WebResponse> {
+    const result = await this.bookToursService.findAll(customer.id, query);
     return {
       message: result.message,
-      data: result.datas,
+      data: result.datas || result.data,
+      meta: result.meta,
     };
   }
 
-  @Roles('traveller')
-  @Get('find/:id')
+  // GET /book-tours/:id (Find Detail Book Tour by ID)
+  @Get(':id')
   @HttpCode(HttpStatus.OK)
   async findOne(
-    @CurrentUser() user: any,
+    @GetCustomer() customer: CustomerAuthData,
     @Param('id') id: string,
   ): Promise<WebResponse> {
-    const result = await this.bookToursService.findBookTourId(id, user.id);
+    const result = await this.bookToursService.findBookTourId(id, customer.id);
     return {
       message: result.message,
       data: result.data,
     };
   }
 
-  @Roles('admin', 'owner', 'traveller')
-  @Put('update-status/:id')
+  // PATCH /book-tours/:id/status (Update Status Book Tour)
+  @Permissions('book-tours:update-status')
+  @Patch(':id/status')
   @HttpCode(HttpStatus.OK)
   async updateStatus(
     @Param('id') id: string,
@@ -78,22 +89,17 @@ export class BookToursController {
     };
   }
 
-  @Roles('traveller')
-  @Put('update/:id')
+  // DELETE /book-tours/:id (Delete Book Tour)
+  @Permissions('book-tours:delete')
+  @Delete(':id')
   @HttpCode(HttpStatus.OK)
-  async update(
-    @CurrentUser() user: any,
+  async remove(
+    @GetCustomer() customer: CustomerAuthData,
     @Param('id') id: string,
-    @Body() updateBookTourDto: UpdateBookTourDto,
   ): Promise<WebResponse> {
-    const result = await this.bookToursService.update(
-      id,
-      user.id,
-      updateBookTourDto,
-    );
+    const result = await this.bookToursService.remove(id, customer.id);
     return {
       message: result.message,
-      data: result.data,
     };
   }
 }

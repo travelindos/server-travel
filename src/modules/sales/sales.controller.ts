@@ -1,69 +1,64 @@
-import { Controller, Get, HttpCode, HttpStatus } from '@nestjs/common';
-import { Roles } from 'src/common/decorators/roles.decorator';
+import {
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
+import { Permissions } from '../../common/decorators/permissions.decorator';
+import { AuthGuard } from '../../common/middlewares/auth.guard';
+import { RolesGuard } from '../../common/middlewares/role.guard';
 import { SalesService } from './sales.service';
+import { FilterSaleDto, FilterSalesReportDto } from './dto/filter-sale.dto';
 
 @Controller('sales')
-@Roles('owner')
+@UseGuards(AuthGuard, RolesGuard)
 export class SalesController {
   constructor(private readonly salesService: SalesService) {}
 
+  /**
+   * GET /api/v1/sales
+   * List all sales with pagination and filters
+   */
   @Get()
+  @Permissions('sales:read')
   @HttpCode(HttpStatus.OK)
-  async getAllSales() {
-    const result = await this.salesService.getAllSales();
-    return {
-      message: result.message,
-      data: result.datas,
-    };
+  async findAll(@Query() query: FilterSaleDto) {
+    return this.salesService.findAll(query);
   }
 
+  /**
+   * GET /api/v1/sales/summary
+   * High-level KPI metrics
+   */
   @Get('summary')
+  @Permissions('sales:read')
   @HttpCode(HttpStatus.OK)
-  async getSummary() {
-    const result = await this.salesService.getDashboardSummary();
-    return {
-      message: result.message,
-      data: result.data,
-    };
+  async getSummary(@Query() query: FilterSaleDto) {
+    return this.salesService.getSummary(query);
   }
 
-  @Get('daily')
+  /**
+   * GET /api/v1/sales/reports?period=daily|weekly|monthly|yearly
+   * Unified sales analytics and periodic aggregation
+   */
+  @Get('reports')
+  @Permissions('sales:read')
   @HttpCode(HttpStatus.OK)
-  async getDaily() {
-    const result = await this.salesService.getDailySales();
-    return {
-      message: result.message,
-      data: result.data,
-    };
+  async getReports(@Query() query: FilterSalesReportDto) {
+    return this.salesService.getReports(query);
   }
 
-  @Get('weekly')
+  /**
+   * GET /api/v1/sales/:id
+   * Get single sale details
+   */
+  @Get(':id')
+  @Permissions('sales:read')
   @HttpCode(HttpStatus.OK)
-  async getWeekly() {
-    const result = await this.salesService.getWeeklySales();
-    return {
-      message: result.message,
-      data: result.data,
-    };
-  }
-
-  @Get('monthly')
-  @HttpCode(HttpStatus.OK)
-  async getMonthly() {
-    const result = await this.salesService.getMonthlySales();
-    return {
-      message: result.message,
-      data: result.data,
-    };
-  }
-
-  @Get('yearly')
-  @HttpCode(HttpStatus.OK)
-  async getYearly() {
-    const result = await this.salesService.getYearlySales();
-    return {
-      message: result.message,
-      data: result.data,
-    };
+  async findOne(@Param('id') id: string) {
+    return this.salesService.findOne(id);
   }
 }

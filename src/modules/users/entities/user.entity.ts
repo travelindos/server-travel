@@ -1,4 +1,4 @@
-import { BookTour } from 'src/modules/book-tours/entities/book-tour.entity';
+import { BookTour } from '../../book-tours/entities/book-tour.entity';
 import {
   Column,
   CreateDateColumn,
@@ -13,7 +13,7 @@ import {
 } from 'typeorm';
 import { Roles } from './role.entity';
 import { Session } from './session.entity';
-import { Payment } from 'src/modules/payments/entities/payment.entity';
+import { Payment } from '../../payments/entities/payment.entity';
 import { Profile } from './profile.entity';
 
 @Entity('users')
@@ -70,8 +70,7 @@ export class User {
   })
   verify_code_expires_at: Date;
 
-  @OneToMany(() => BookTour, (bookTour) => bookTour.user)
-  book_tours: BookTour[];
+
 
   @OneToMany(() => Payment, (payment) => payment.user)
   payments: Payment[];

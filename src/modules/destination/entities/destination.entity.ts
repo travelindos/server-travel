@@ -1,5 +1,6 @@
 import Hashids from 'hashids';
-import { State } from 'src/modules/country/entities/state.entity';
+import { State } from '../../../modules/locations/entities/state.entity';
+import { City } from '../../../modules/locations/entities/city.entity';
 import {
   BeforeInsert,
   Column,
@@ -14,7 +15,6 @@ import {
 } from 'typeorm';
 import { CategoryDestination } from './category_destination.entity';
 import { DestinationTranslation } from './destination-translation.entity';
-import { BookTourItems } from 'src/modules/book-tours/entities/book-tour-items.entity';
 
 @Entity('destinations')
 export class Destination {
@@ -24,7 +24,11 @@ export class Destination {
   @BeforeInsert()
   generateId() {
     if (!this.id) {
-      this.id = new Hashids(process.env.ID_SECRET, 10).encode(Date.now());
+      this.id = new Hashids(process.env.ID_SECRET || 'travel_secret', 10).encode(
+        Date.now(),
+        process.hrtime()[1],
+        Math.floor(Math.random() * 100000),
+      );
     }
   }
 
@@ -39,6 +43,13 @@ export class Destination {
   @JoinColumn({ name: 'state_id' })
   state: State;
 
+  @ManyToOne(() => City, (city) => city.destinations, {
+    nullable: true,
+    onDelete: 'SET NULL',
+  })
+  @JoinColumn({ name: 'city_id' })
+  city?: City;
+
   @OneToMany(
     () => DestinationTranslation,
     (destinationTranslation) => destinationTranslation.destination,
@@ -50,14 +61,25 @@ export class Destination {
     precision: 10,
     scale: 2,
     default: 0,
+    transformer: {
+      to: (value: number) => value,
+      from: (value: string) => (value ? parseFloat(value) : 0),
+    },
   })
   price: number;
 
-  @OneToMany(
-    () => BookTourItems,
-    (bookTourItems) => bookTourItems.destination,
-  )
-  book_tour_items: BookTourItems[];
+  @Column({
+    type: 'varchar',
+    length: 500,
+    nullable: true,
+  })
+  thumbnail?: string;
+
+  @Column({
+    type: 'json',
+    nullable: true,
+  })
+  images?: string[];
 
   @CreateDateColumn()
   createdAt: Date;

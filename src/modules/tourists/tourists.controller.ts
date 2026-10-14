@@ -9,19 +9,19 @@ import {
   Post,
   Put,
 } from '@nestjs/common';
-import { Roles } from 'src/common/decorators/roles.decorator';
-import { CurrentUser } from 'src/common/decorators/user.decorator';
-import { WebResponse } from 'src/types/response/response.type';
+import { Permissions } from '../../common/decorators/permissions.decorator';
+import { CurrentUser } from '../../common/decorators/user.decorator';
+import { WebResponse } from '../../types/response/response.type';
 import { CreateTouristDto, UpdateTouristDto } from './dto/create-tourist.dto';
 import { TouristsService } from './tourists.service';
 import { CreateManyTouristsDto } from './dto/create-many-tourists.dto';
 
 @Controller('tourists')
-@Roles('traveller')
 export class TouristsController {
   constructor(private readonly touristsService: TouristsService) {}
 
   @Post('create')
+  @Permissions('tourists:create')
   @HttpCode(HttpStatus.CREATED)
   async create(
     @CurrentUser() user: any,
@@ -38,6 +38,7 @@ export class TouristsController {
   }
 
   @Post('create-many')
+  @Permissions('tourists:create')
   @HttpCode(HttpStatus.CREATED)
   async createMany(
     @CurrentUser() user: any,
@@ -54,6 +55,7 @@ export class TouristsController {
   }
 
   @Get('find-all')
+  @Permissions('tourists:read')
   @HttpCode(HttpStatus.OK)
   async findAll(@CurrentUser() user: any): Promise<WebResponse> {
     const result = await this.touristsService.findAll(user.id);
@@ -64,6 +66,7 @@ export class TouristsController {
   }
 
   @Get('find/:id')
+  @Permissions('tourists:read')
   @HttpCode(HttpStatus.OK)
   async findOne(
     @CurrentUser() user: any,
@@ -77,6 +80,7 @@ export class TouristsController {
   }
 
   @Put('update/:id')
+  @Permissions('tourists:update')
   @HttpCode(HttpStatus.OK)
   async update(
     @CurrentUser() user: any,
@@ -95,6 +99,7 @@ export class TouristsController {
   }
 
   @Delete('delete/:id')
+  @Permissions('tourists:delete')
   @HttpCode(HttpStatus.OK)
   async remove(
     @CurrentUser() user: any,

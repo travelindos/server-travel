@@ -1,6 +1,7 @@
 import Hashids from 'hashids';
-import { BookMotor } from 'src/modules/book-motors/entities/book-motor.entity';
-import { BookTour } from 'src/modules/book-tours/entities/book-tour.entity';
+import { BookMotor } from '../../../modules/book-motors/entities/book-motor.entity';
+import { BookTour } from '../../../modules/book-tours/entities/book-tour.entity';
+import { BookEntertainmentAttraction } from '../../../modules/book-entertainment-attractions/entities/book-entertainment-attraction.entity';
 import {
   BeforeInsert,
   Column,
@@ -10,13 +11,19 @@ import {
   PrimaryColumn,
   CreateDateColumn,
   UpdateDateColumn,
-  DeleteDateColumn
+  DeleteDateColumn,
 } from 'typeorm';
 
 export enum Gender {
   MR = 'Mr',
   MISS = 'Miss',
   MRS = 'Mrs',
+}
+
+export enum AgeGroup {
+  ADULT = 'adult',
+  CHILD = 'child',
+  INFANT = 'infant',
 }
 
 @Entity('tourists')
@@ -27,10 +34,10 @@ export class Tourist {
   @BeforeInsert()
   generateId() {
     if (!this.id) {
-      this.id = new Hashids(process.env.ID_SECRET, 10).encode(
-        Date.now(),
-        Math.floor(Math.random() * 10000),
-      );
+      this.id = new Hashids(
+        process.env.ID_SECRET || 'travel_secret',
+        10,
+      ).encode(Date.now(), Math.floor(Math.random() * 10000));
     }
   }
 
@@ -41,6 +48,14 @@ export class Tourist {
   @ManyToOne(() => BookMotor, (bookMotor) => bookMotor.tourists)
   @JoinColumn({ name: 'book_motor_id' })
   book_motor: BookMotor;
+
+  @ManyToOne(
+    () => BookEntertainmentAttraction,
+    (bookEntertainment) => bookEntertainment.tourists,
+    { onDelete: 'CASCADE', nullable: true },
+  )
+  @JoinColumn({ name: 'book_entertainment_attraction_id' })
+  book_entertainment_attraction?: BookEntertainmentAttraction;
 
   @Column()
   name: string;
@@ -61,6 +76,16 @@ export class Tourist {
 
   @Column()
   passport_number: string;
+
+  @Column({ type: 'date', nullable: true })
+  birth_date?: Date;
+
+  @Column({
+    type: 'enum',
+    enum: AgeGroup,
+    nullable: true,
+  })
+  age_group?: AgeGroup;
 
   @CreateDateColumn()
   created_at: Date;

@@ -1,12 +1,13 @@
 import Hashids from 'hashids';
-import { BookMotorItem } from 'src/modules/book-motors/entities/book-motor-item.entity';
-import { State } from 'src/modules/country/entities/state.entity';
+import { BookMotorItem } from '../../../modules/book-motors/entities/book-motor-item.entity';
+import { State } from '../../../modules/locations/entities/state.entity';
 import {
   BeforeInsert,
   Column,
   CreateDateColumn,
   DeleteDateColumn,
   Entity,
+  Index,
   JoinColumn,
   ManyToOne,
   OneToMany,
@@ -53,6 +54,7 @@ export class Motor {
   @Column()
   thumbnail: string;
 
+  @Index()
   @Column()
   is_available: boolean;
 
