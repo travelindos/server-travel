@@ -4,7 +4,7 @@ services:
     container_name: travel-api-${ENV_NAME:-staging}
     restart: unless-stopped
     ports:
-      - "${PORT:-8002}:${PORT:-8002}"
+      - "${API_PORT:-8002}:${PORT:-8002}"
     env_file:
       - .env
     environment:

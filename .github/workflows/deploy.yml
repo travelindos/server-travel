@@ -109,6 +109,8 @@ jobs:
 
             export ENV_NAME=staging
             export DOCKER_TAG=staging
+            export API_PORT=8002
+            export MYSQL_HOST_PORT=3307
 
             # Detect modern docker compose or fallback to docker-compose
             if docker compose version > /dev/null 2>&1; then
@@ -207,6 +209,8 @@ jobs:
 
             export ENV_NAME=production
             export DOCKER_TAG=latest
+            export API_PORT=8003
+            export MYSQL_HOST_PORT=3308
 
             # Detect modern docker compose or fallback to docker-compose
             if docker compose version > /dev/null 2>&1; then
@@ -229,7 +233,7 @@ jobs:
       - name: Health Check - Production
         continue-on-error: true
         run: |
-          URL="http://${{ secrets.VPS_PACIFICTRAVEL_IP }}:8002/health"
+          URL="http://${{ secrets.VPS_PACIFICTRAVEL_IP }}:8003/health"
           echo "🔍 Verifying $URL..."
           sleep 15
 
