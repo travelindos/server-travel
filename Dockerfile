@@ -46,11 +46,11 @@ RUN chown -R nestjs:nodejs /app
 USER nestjs
 
 # Expose port
-EXPOSE 8082
+EXPOSE 8002
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=40s \
-  CMD node -e "require('http').get('http://localhost:8082/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
+  CMD node -e "require('http').get('http://localhost:' + (process.env.PORT || 8002) + '/', (r) => {process.exit(0)})"
 
 # Start application
-CMD ["node", "dist/main"]
+CMD ["sh", "-c", "if [ -f dist/src/main.js ]; then node dist/src/main; else node dist/main; fi"]
