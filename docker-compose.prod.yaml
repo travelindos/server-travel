@@ -9,8 +9,8 @@ services:
       - .env
     environment:
       - NODE_ENV=${ENV_NAME:-staging}
-      - DATABASE_HOST=travel-mysql-${ENV_NAME:-staging}
-      - DATABASE_PORT=3306
+      - DATABASE_HOST=${DATABASE_HOST:-travel-mysql-${ENV_NAME:-staging}}
+      - DATABASE_PORT=${DATABASE_PORT:-3306}
     depends_on:
       travel_mysql:
         condition: service_healthy
