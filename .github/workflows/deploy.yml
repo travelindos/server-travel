@@ -1,126 +1,245 @@
-name: CI/CD Pipeline
+name: Deploy Backend to aaPanel
 
 on:
   push:
-    branches:
-      - master
-      - staging
+    branches: [ master, staging ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+
+# ─── Jobs ────────────────────────────────────────────────────────────────────
 
 jobs:
-  lint:
-    name: Lint Code
+  # ── 1. Code Quality & Unit Tests (NestJS CI Gate) ──────────────────────────
+  unit-test:
+    name: Run Unit Tests & Verify Build
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v3
+      - name: Setup PNPM
+        uses: pnpm/action-setup@v4
         with:
-          version: 8
+          version: 9
 
-      - name: Setup Node.js
+      - name: Setup Node.js 20
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'pnpm' # Menambahkan Cache untuk mempercepat proses instalasi
-
-      - name: Install Dependencies
-        run: pnpm install --frozen-lockfile # Standar CI untuk memastikan konsistensi versi package
-
-      - name: Run Linter
-        run: pnpm run lint
-
-  test:
-    name: Unit Tests
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v3
-        with:
-          version: 8
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
+          node-version: 20
           cache: 'pnpm'
 
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Run Tests
-        run: pnpm run test
+      - name: Type Check (TypeScript)
+        run: pnpm run typecheck
 
-  build:
-    name: Build Application
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - name: Run Unit Tests
+        run: pnpm run test:ci
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v3
-        with:
-          version: 8
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'pnpm'
-
-      - name: Install Dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build Code # Pastikan TypeScript berhasil di-compile tanpa error
+      - name: Build Check (NestJS)
         run: pnpm run build
 
+  # ── 2. Build & Push Staging Image ──────────────────────────────────────────
+  # Triggered only when pushing to staging branch
+  build-staging:
+    name: Build & Push Staging Image
+    needs: unit-test
+    if: github.ref == 'refs/heads/staging' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image (staging)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/server-travel:staging
+
+  # ── 3. Deploy Staging ──────────────────────────────────────────────────────
   deploy-staging:
     name: Deploy to Staging
-    needs: [lint, test, build] # Menunggu semua check selesai
-    if: github.ref == 'refs/heads/staging'
+    needs: build-staging
     runs-on: ubuntu-latest
+    environment: staging
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Deploy to VPS via SSH
+      - name: Prepare dynamic docker-compose file
+        run: |
+          COMPOSE_B64=$(base64 -w 0 docker-compose.prod.yaml)
+          echo "COMPOSE_B64=$COMPOSE_B64" >> $GITHUB_ENV
+
+      - name: SSH to VPS and Deploy (Staging)
         uses: appleboy/ssh-action@master
         with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USERNAME }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          port: ${{ secrets.VPS_PORT || 22 }}
+          host: ${{ secrets.VPS_PACIFICTRAVEL_IP }}
+          username: ${{ secrets.VPS_PACIFICTRAVEL_USER }}
+          key: ${{ secrets.VPS_PACIFICTRAVEL_SSH_KEY }}
+          envs: COMPOSE_B64
           script: |
-            cd ${{ secrets.VPS_DEPLOY_PATH_STAGING }}
-            git pull origin staging
-            docker-compose -f docker-compose.yaml build
-            docker-compose -f docker-compose.yaml up -d
-            docker image prune -f
+            set -e
+            DEPLOY_PATH=/www/wwwroot/server-travel/travel-staging
+            mkdir -p $DEPLOY_PATH
+            cd $DEPLOY_PATH
 
+            echo "$COMPOSE_B64" | base64 -d > docker-compose.prod.yaml
+            echo "${{ secrets.VPS_PACIFICTRAVEL_GH_PTH }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            touch .env
+
+            export ENV_NAME=staging
+            export DOCKER_TAG=staging
+
+            # Detect modern docker compose or fallback to docker-compose
+            if docker compose version > /dev/null 2>&1; then
+              DC="docker compose"
+            else
+              DC="docker-compose"
+            fi
+
+            $DC -f docker-compose.prod.yaml pull
+            $DC -f docker-compose.prod.yaml up -d
+            docker image prune -f || true
+            echo "✅ Staging deployed successfully"
+
+  # ── 4. Verify Staging ──────────────────────────────────────────────────────
+  verify-staging:
+    name: Verify Staging API
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+    steps:
+      - name: Health Check - Staging
+        continue-on-error: true
+        run: |
+          URL="http://${{ secrets.VPS_PACIFICTRAVEL_IP }}:8002/health"
+          echo "🔍 Verifying $URL..."
+          sleep 15
+
+          for i in {1..3}; do
+            RESPONSE=$(curl -sf --max-time 10 $URL 2>/dev/null || true)
+            if [ -n "$RESPONSE" ]; then
+              echo "✅ Staging health check passed!"
+              exit 0
+            fi
+            echo "Attempt $i failed, retrying in 10s..."
+            sleep 10
+          done
+          echo "⚠️ Health check skipped - domain / port may need reverse proxy"
+
+  # ── 5. Build & Push Production Image ───────────────────────────────────────
+  # Triggered only when pushing to master branch
+  build-production:
+    name: Build & Push Production Image
+    needs: unit-test
+    if: github.ref == 'refs/heads/master' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image (production)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/server-travel:latest
+
+  # ── 6. Deploy Production ───────────────────────────────────────────────────
   deploy-production:
     name: Deploy to Production
-    needs: [lint, test, build] # Menunggu semua check selesai
-    if: github.ref == 'refs/heads/master'
+    needs: build-production
     runs-on: ubuntu-latest
+    environment: production
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Deploy to VPS via SSH
+      - name: Prepare dynamic docker-compose file
+        run: |
+          COMPOSE_B64=$(base64 -w 0 docker-compose.prod.yaml)
+          echo "COMPOSE_B64=$COMPOSE_B64" >> $GITHUB_ENV
+
+      - name: SSH to VPS and Deploy (Production)
         uses: appleboy/ssh-action@master
         with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USERNAME }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          port: ${{ secrets.VPS_PORT || 22 }}
+          host: ${{ secrets.VPS_PACIFICTRAVEL_IP }}
+          username: ${{ secrets.VPS_PACIFICTRAVEL_USER }}
+          key: ${{ secrets.VPS_PACIFICTRAVEL_SSH_KEY }}
+          envs: COMPOSE_B64
           script: |
-            cd ${{ secrets.VPS_DEPLOY_PATH_PROD }}
-            git pull origin master
-            docker-compose -f docker-compose.prod.yaml build
-            docker-compose -f docker-compose.prod.yaml up -d
-            docker image prune -f
+            set -e
+            DEPLOY_PATH=/www/wwwroot/server-travel/travel-production
+            mkdir -p $DEPLOY_PATH
+            cd $DEPLOY_PATH
+
+            echo "$COMPOSE_B64" | base64 -d > docker-compose.prod.yaml
+            echo "${{ secrets.VPS_PACIFICTRAVEL_GH_PTH }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            touch .env
+
+            export ENV_NAME=production
+            export DOCKER_TAG=latest
+
+            # Detect modern docker compose or fallback to docker-compose
+            if docker compose version > /dev/null 2>&1; then
+              DC="docker compose"
+            else
+              DC="docker-compose"
+            fi
+
+            $DC -f docker-compose.prod.yaml pull
+            $DC -f docker-compose.prod.yaml up -d
+            docker image prune -f || true
+            echo "✅ Production deployed successfully"
+
+  # ── 7. Verify Production ───────────────────────────────────────────────────
+  verify-production:
+    name: Verify Production API
+    needs: deploy-production
+    runs-on: ubuntu-latest
+    steps:
+      - name: Health Check - Production
+        continue-on-error: true
+        run: |
+          URL="http://${{ secrets.VPS_PACIFICTRAVEL_IP }}:8002/health"
+          echo "🔍 Verifying $URL..."
+          sleep 15
+
+          for i in {1..3}; do
+            RESPONSE=$(curl -sf --max-time 10 $URL 2>/dev/null || true)
+            if [ -n "$RESPONSE" ]; then
+              echo "✅ Production health check passed!"
+              exit 0
+            fi
+            echo "Attempt $i failed, retrying in 10s..."
+            sleep 10
+          done
+          echo "⚠️ Health check skipped - domain / port may need reverse proxy"

@@ -1,110 +1,60 @@
-version: '3.8'
-
 services:
-  travel_mysql:
-    image: mysql:8.0
-    container_name: travel_mysql_prod
-    restart: unless-stopped
-    environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${DATABASE_NAME}
-      MYSQL_USER: ${DATABASE_USER}
-      MYSQL_PASSWORD: ${DATABASE_PASSWORD}
-    # MySQL optimization for shared VPS
-    command:
-      - --max_connections=100
-      - --innodb_buffer_pool_size=512M
-      - --innodb_log_file_size=128M
-      - --query_cache_size=32M
-      - --tmp_table_size=32M
-      - --max_heap_table_size=32M
-      - --innodb_flush_log_at_trx_commit=2
-      - --innodb_flush_method=O_DIRECT
-    volumes:
-      - travel-mysql-data:/var/lib/mysql
-      - ./mysql-init:/docker-entrypoint-initdb.d
-    networks:
-      - travel-network
-    # Resource limits to prevent memory hogging
-    deploy:
-      resources:
-        limits:
-          cpus: '1.0'
-          memory: 768M
-        reservations:
-          cpus: '0.5'
-          memory: 512M
-    healthcheck:
-      test:
-        [
-          'CMD',
-          'mysqladmin',
-          'ping',
-          '-h',
-          'localhost',
-          '-u',
-          'root',
-          '-p${MYSQL_ROOT_PASSWORD}',
-        ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-
   travel_api:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: travel_api_prod
+    image: ghcr.io/travelindos/server-travel:${DOCKER_TAG:-staging}
+    container_name: travel-api-${ENV_NAME:-staging}
     restart: unless-stopped
     ports:
-      # Bind to localhost only for security (access via reverse proxy)
-      - '127.0.0.1:${PORT}:${PORT}'
+      - "${PORT:-8002}:${PORT:-8002}"
     env_file:
       - .env
     environment:
-      # Node.js memory optimization
-      - NODE_OPTIONS=--max-old-space-size=384
+      - NODE_ENV=${ENV_NAME:-staging}
+      - DATABASE_HOST=travel-mysql-${ENV_NAME:-staging}
+      - DATABASE_PORT=3306
     depends_on:
       travel_mysql:
         condition: service_healthy
     networks:
       - travel-network
-    # Resource limits
-    deploy:
-      resources:
-        limits:
-          cpus: '1.5'
-          memory: 512M
-        reservations:
-          cpus: '0.5'
-          memory: 256M
+
+  travel_mysql:
+    image: mysql:8.0
+    container_name: travel-mysql-${ENV_NAME:-staging}
+    restart: unless-stopped
+    command: --default-authentication-plugin=mysql_native_password
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      MYSQL_DATABASE: ${DATABASE_NAME:-travel_db}
+      MYSQL_USER: ${DATABASE_USER:-traveldb}
+      MYSQL_PASSWORD: ${DATABASE_PASSWORD:-traveldb}
+    ports:
+      - "${MYSQL_HOST_PORT:-3307}:3306"
+    volumes:
+      - travel_mysql_data:/var/lib/mysql
     healthcheck:
       test:
         [
-          'CMD',
-          'wget',
-          '--quiet',
-          '--tries=1',
-          '--spider',
-          'http://localhost:${PORT}/health',
+          "CMD",
+          "mysqladmin",
+          "ping",
+          "-h",
+          "localhost",
+          "-u",
+          "root",
+          "-p${MYSQL_ROOT_PASSWORD:-root}",
         ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-    # Security hardening
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    cap_add:
-      - NET_BIND_SERVICE
-
-volumes:
-  travel-mysql-data:
-    driver: local
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - travel-network
 
 networks:
   travel-network:
+    name: travel-network-${ENV_NAME:-staging}
     driver: bridge
+
+volumes:
+  travel_mysql_data:
+    name: travel-mysql-data-${ENV_NAME:-staging}
