@@ -43,9 +43,11 @@ async function bootstrap() {
     'http://localhost:3700',
     'http://localhost:3006',
     'http://localhost:3005',
+    'https://stag.pacifictravelindo.com',
     'https://pacifictravelindo.com',
     'https://www.pacifictravelindo.com',
     'https://pasifik.my.id',
+    'https://stag.pasifik.my.id',
     'https://www.pasifik.my.id',
   ];
   app.enableCors({
