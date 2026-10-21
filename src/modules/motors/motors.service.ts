@@ -83,6 +83,7 @@ export class MotorsService {
       const {
         merek_id,
         state_id,
+        country_id,
         translations,
         variants,
         prices,
@@ -197,11 +198,11 @@ export class MotorsService {
       .leftJoinAndSelect('motor.motor_prices', 'motor_prices');
 
     if (query?.merek_id) {
-      qb.andWhere('motor.merek.id = :merek_id', { merek_id: query.merek_id });
+      qb.andWhere('merek.id = :merek_id', { merek_id: query.merek_id });
     }
 
     if (query?.state_id) {
-      qb.andWhere('motor.state.id = :state_id', { state_id: query.state_id });
+      qb.andWhere('state.id = :state_id', { state_id: query.state_id });
     }
 
     if (query?.country_id) {
@@ -253,7 +254,7 @@ export class MotorsService {
     const [motors, total] = await qb
       .skip(skip)
       .take(limit)
-      .orderBy('motor.createdAt', 'DESC')
+      .orderBy('motor.created_at', 'DESC')
       .getManyAndCount();
 
     this.logger.debug(`Success find all motors (page: ${page}, limit: ${limit}, total: ${total})`);
@@ -371,6 +372,7 @@ export class MotorsService {
       const {
         merek_id,
         state_id,
+        country_id,
         translations,
         variants,
         prices,
