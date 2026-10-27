@@ -236,24 +236,27 @@ export class EntertainmentAttractionsService implements OnModuleInit {
         where: { id: reqDto.category_destination_id },
         select: ['id', 'name'],
       }),
-      this.countryRepository.findOne({
-        where: { id: reqDto.country_id },
-        select: ['id', 'name'],
-      }),
+      reqDto.country_id
+        ? this.countryRepository.findOne({
+            where: { id: reqDto.country_id },
+            select: ['id', 'name'],
+          })
+        : null,
       this.stateRepository.findOne({
         where: { id: reqDto.state_id },
-        select: ['id', 'name'],
+        relations: ['country'],
       }),
     ]);
 
     if (!findCategory) {
       throw new HttpException('Attraction Category not found', HttpStatus.BAD_REQUEST);
     }
-    if (!findCountry) {
-      throw new HttpException('Country not found', HttpStatus.BAD_REQUEST);
-    }
     if (!findState) {
       throw new HttpException('State/Location not found', HttpStatus.BAD_REQUEST);
+    }
+    const resolvedCountry = findCountry || findState.country;
+    if (!resolvedCountry) {
+      throw new HttpException('Country not found', HttpStatus.BAD_REQUEST);
     }
 
     // Determine starting price from tickets or fallback to price field
@@ -270,7 +273,7 @@ export class EntertainmentAttractionsService implements OnModuleInit {
       // Create and save Attraction
       const attraction = manager.create(EntertainmentAttraction, {
         category_entertainment: findCategory,
-        country: findCountry,
+        country: resolvedCountry,
         state: findState,
         price: startingPrice,
         thumbnail: reqDto.thumbnail,
@@ -324,7 +327,7 @@ export class EntertainmentAttractionsService implements OnModuleInit {
 
       // Reassemble in-memory entity graph to eliminate any extra SELECT round-trip query
       savedAttraction.category_entertainment = findCategory;
-      savedAttraction.country = findCountry;
+      savedAttraction.country = resolvedCountry;
       savedAttraction.state = findState;
       savedAttraction.translations = savedTranslations;
       savedAttraction.tickets = savedTickets;
@@ -485,9 +488,14 @@ export class EntertainmentAttractionsService implements OnModuleInit {
     if (reqDto.state_id) {
       const findState = await this.stateRepository.findOne({
         where: { id: reqDto.state_id },
-        select: ['id', 'name'],
+        relations: ['country'],
       });
-      if (findState) attraction.state = findState;
+      if (findState) {
+        attraction.state = findState;
+        if (!reqDto.country_id && findState.country) {
+          attraction.country = findState.country;
+        }
+      }
     }
 
     if (reqDto.thumbnail !== undefined) attraction.thumbnail = reqDto.thumbnail;
@@ -538,6 +546,13 @@ export class EntertainmentAttractionsService implements OnModuleInit {
           }
         }
 
+        // Remove any obsolete tickets that were deleted in the update form
+        const retainedTicketIds = new Set(finalTickets.map((t) => t.id).filter(Boolean));
+        const ticketsToDelete = existingTickets.filter((t) => !retainedTicketIds.has(t.id));
+        if (ticketsToDelete.length > 0) {
+          await manager.remove(EntertainmentAttractionTicket, ticketsToDelete);
+        }
+
         attraction.tickets = finalTickets;
       } else if (reqDto.price !== undefined) {
         attraction.price = reqDto.price;
@@ -570,6 +585,13 @@ export class EntertainmentAttractionsService implements OnModuleInit {
             const savedNew = await manager.save(EntertainmentAttractionTranslation, newTranslation);
             finalTranslations.push(savedNew);
           }
+        }
+
+        // Remove any obsolete translations that were removed
+        const retainedTransIds = new Set(finalTranslations.map((t) => t.id).filter(Boolean));
+        const transToDelete = existingTranslations.filter((t) => !retainedTransIds.has(t.id));
+        if (transToDelete.length > 0) {
+          await manager.remove(EntertainmentAttractionTranslation, transToDelete);
         }
 
         attraction.translations = finalTranslations;

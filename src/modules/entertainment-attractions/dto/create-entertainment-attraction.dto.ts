@@ -61,9 +61,9 @@ export class CreateAttractionTicketDto {
 }
 
 export class CreateEntertainmentAttractionDto {
-  @IsNotEmpty({ message: 'Country is required' })
+  @IsOptional()
   @IsString({ message: 'Country must be a string' })
-  country_id: string;
+  country_id?: string;
 
   @IsNotEmpty({ message: 'State is required' })
   @IsString({ message: 'State must be a string' })
