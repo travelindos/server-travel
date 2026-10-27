@@ -344,7 +344,10 @@ export class EntertainmentAttractionsService implements OnModuleInit {
   // ─── Find All Attractions with Translations & Tickets ────────────────
   async findAllWithTranslation(filterDto: FilterEntertainmentAttractionDto = {}) {
     const page = Math.max(1, Number(filterDto.page || 1));
-    const limit = Math.max(1, Math.min(100, Number(filterDto.limit || 10)));
+    const hasLimit = filterDto.limit !== undefined && filterDto.limit !== '';
+    const limit = hasLimit
+      ? Math.max(1, Math.min(1000, Number(filterDto.limit)))
+      : 100;
     const skip = (page - 1) * limit;
 
     const queryBuilder = this.attractionRepository
@@ -390,12 +393,15 @@ export class EntertainmentAttractionsService implements OnModuleInit {
 
     return {
       message: 'Entertainment Attractions retrieved successfully',
+      data: datas,
       datas,
       meta: {
         page,
         limit,
         total,
+        totalData: total,
         totalPage: Math.ceil(total / limit),
+        totalPages: Math.ceil(total / limit),
       },
     };
   }

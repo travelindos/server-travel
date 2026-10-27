@@ -51,8 +51,9 @@ export class EntertainmentAttractionsController {
     return {
       message: result.message,
       data: result.datas,
+      datas: result.datas,
       meta: result.meta,
-    };
+    } as any;
   }
 
   // GET /entertainment-attractions/categories
