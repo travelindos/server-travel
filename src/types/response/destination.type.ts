@@ -40,11 +40,13 @@ export type PaginationMeta = {
   limit: number;
   totalData: number;
   totalPage: number;
+  total?: number;
+  totalPages?: number;
 };
 
-export interface ResponseDestination extends ResponseModel<DestinationResponse> {
+export interface ResponseDestination extends ResponseModel<DestinationResponse | any> {
   message: string;
-  data?: DestinationResponse;
+  data?: any;
   datas?: DestinationResponse[];
   meta?: PaginationMeta;
 }

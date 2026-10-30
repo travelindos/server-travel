@@ -48,8 +48,9 @@ export class DestinationController {
     return {
       message: result.message,
       data: result.datas,
+      datas: result.datas,
       meta: result.meta,
-    };
+    } as any;
   }
 
   // GET /destinations/categories or /entertainment-attractions/categories

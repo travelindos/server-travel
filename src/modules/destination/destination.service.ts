@@ -139,7 +139,13 @@ export class DestinationService {
     filterDto: FilterDestinationDto = {},
   ): Promise<ResponseDestination> {
     const page = Math.max(1, Number(filterDto.page || 1));
-    const limit = Math.max(1, Math.min(100, Number(filterDto.limit || 10)));
+    const hasLimit =
+      filterDto.limit !== undefined &&
+      filterDto.limit !== null &&
+      (filterDto.limit as any) !== '';
+    const limit = hasLimit
+      ? Math.max(1, Math.min(1000, Number(filterDto.limit)))
+      : 100;
     const skip = (page - 1) * limit;
 
     const queryBuilder = this.destinationRepository
@@ -181,44 +187,49 @@ export class DestinationService {
 
     const totalPage = Math.ceil(totalData / limit);
 
+    const mappedDestinations = destinations.map((item) => ({
+      id: item.id,
+      country_id: item.state?.country?.id || '',
+      country_name: item.state?.country?.name || '',
+      state_id: item.state?.id || '',
+      state_name: item.state?.name || '',
+      city_id: item.city?.id,
+      city_name: item.city?.name,
+      location: item.city
+        ? `${item.city.name}, ${item.state?.country?.name || ''}`
+        : item.state
+          ? `${item.state.name}, ${item.state.country?.name || ''}`
+          : '',
+      category_destination_id: item.category_destination?.id || '',
+      category_destination_name: item.category_destination?.name || '',
+      price: item.price,
+      thumbnail: item.thumbnail,
+      images: item.images,
+      translations: item.translations?.map((t) => ({
+        id: t.id,
+        destination_id: item.id,
+        language_code: t.language_code,
+        name: t.name,
+        slug: t.slug,
+        description: t.description,
+        detail_tour: t.detail_tour,
+        facilities: t.facilities,
+        createdAt: t.createdAt,
+        updatedAt: t.updatedAt,
+      })),
+    }));
+
     return {
       message: 'Destinations retrieved successfully',
-      datas: destinations.map((item) => ({
-        id: item.id,
-        country_id: item.state?.country?.id || '',
-        country_name: item.state?.country?.name || '',
-        state_id: item.state?.id || '',
-        state_name: item.state?.name || '',
-        city_id: item.city?.id,
-        city_name: item.city?.name,
-        location: item.city
-          ? `${item.city.name}, ${item.state?.country?.name || ''}`
-          : item.state
-            ? `${item.state.name}, ${item.state.country?.name || ''}`
-            : '',
-        category_destination_id: item.category_destination?.id || '',
-        category_destination_name: item.category_destination?.name || '',
-        price: item.price,
-        thumbnail: item.thumbnail,
-        images: item.images,
-        translations: item.translations?.map((t) => ({
-          id: t.id,
-          destination_id: item.id,
-          language_code: t.language_code,
-          name: t.name,
-          slug: t.slug,
-          description: t.description,
-          detail_tour: t.detail_tour,
-          facilities: t.facilities,
-          createdAt: t.createdAt,
-          updatedAt: t.updatedAt,
-        })),
-      })),
+      data: mappedDestinations,
+      datas: mappedDestinations,
       meta: {
         page,
         limit,
+        total: totalData,
         totalData,
         totalPage,
+        totalPages: totalPage,
       },
     };
   }
